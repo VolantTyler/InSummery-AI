@@ -93,6 +93,10 @@ def api(req: https_fn.Request) -> https_fn.Response:
         return handle_get_schedule(user_id, headers)
     elif path == "/sync-calendar" and req.method == "POST":
         return handle_sync_calendar(user_id, headers)
+    elif path == "/get-profile" and req.method == "GET":
+        return handle_get_profile(user_id, headers)
+    elif path == "/save-profile" and req.method == "POST":
+        return handle_save_profile(req, user_id, headers)
     else:
         return https_fn.Response(json.dumps({"error": "Not Found"}), status=404, headers=headers, mimetype="application/json")
 
@@ -270,6 +274,19 @@ def handle_get_schedule(user_id: str, headers: dict) -> https_fn.Response:
     storage = FirestoreStorageProvider()
     matrix = storage.get_matrix(user_id) or {"activities": [], "gaps": []}
     return https_fn.Response(json.dumps(matrix), status=200, headers=headers, mimetype="application/json")
+
+def handle_get_profile(user_id: str, headers: dict) -> https_fn.Response:
+    storage = FirestoreStorageProvider()
+    profile = storage.get_profile(user_id)
+    if not profile:
+        return https_fn.Response(json.dumps({"onboarding_required": True}), status=200, headers=headers, mimetype="application/json")
+    return https_fn.Response(json.dumps(profile), status=200, headers=headers, mimetype="application/json")
+
+def handle_save_profile(req: https_fn.Request, user_id: str, headers: dict) -> https_fn.Response:
+    data = req.get_json() or {}
+    storage = FirestoreStorageProvider()
+    storage.save_profile(user_id, data)
+    return https_fn.Response(json.dumps({"status": "SUCCESS"}), status=200, headers=headers, mimetype="application/json")
 
 def handle_sync_calendar(user_id: str, headers: dict) -> https_fn.Response:
     # 1. Get Google Calendar OAuth tokens from Firestore

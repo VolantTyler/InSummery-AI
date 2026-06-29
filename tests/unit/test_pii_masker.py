@@ -72,3 +72,31 @@ def test_unmasking(sample_profile):
     assert "sarah.parent@example.com" in unmasked
     assert "[CHILD_A]" not in unmasked
     assert "[EMAIL_1]" not in unmasked
+
+def test_caregiver_masking():
+    profile = {
+        "parents": [{"name": "Sarah"}],
+        "children": [{"name": "Emily"}],
+        "caregivers": [
+            {
+                "name": "Jessica",
+                "email": "jessica.nanny@example.com",
+                "phone": "555-222-3333"
+            }
+        ]
+    }
+    masker = PIIMasker(profile)
+    text = "Nanny Jessica will watch Emily. Reach Jessica at jessica.nanny@example.com or 555-222-3333."
+    masked = masker.mask(text)
+    
+    assert "Jessica" not in masked
+    assert "jessica.nanny@example.com" not in masked
+    assert "555-222-3333" not in masked
+    assert "[CAREGIVER_A]" in masked
+    assert "[CAREGIVER_EMAIL_1]" in masked
+    assert "[CAREGIVER_PHONE_1]" in masked
+    
+    unmasked = masker.unmask(masked)
+    assert "Jessica" in unmasked
+    assert "jessica.nanny@example.com" in unmasked
+    assert "555-222-3333" in unmasked
