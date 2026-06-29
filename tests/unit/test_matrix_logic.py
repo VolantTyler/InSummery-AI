@@ -1,0 +1,122 @@
+import pytest
+from datetime import datetime
+from app.matrix_logic import calculate_gaps, merge_activities, apply_disruption, parse_date
+
+@pytest.fixture
+def sample_profile():
+    return {
+        "children": [{"name": "Emily"}, {"name": "Jack"}],
+        "baseline_coverage": [
+            {
+                "name": "School",
+                "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+                "start_time": "08:30",
+                "end_time": "15:00",
+                "months": ["July"]  # For testing purposes, we'll set it to July
+            }
+        ]
+    }
+
+def test_merge_activities():
+    matrix = {"activities": [], "gaps": []}
+    new_acts = [
+        {
+            "child_name": "Emily",
+            "activity_title": "Soccer Camp",
+            "start_date": "2026-07-06",
+            "end_date": "2026-07-10",
+            "start_time": "09:00",
+            "end_time": "12:00"
+        }
+    ]
+    
+    updated = merge_activities(matrix, new_acts)
+    assert len(updated["activities"]) == 1
+    assert updated["activities"][0]["child_name"] == "Emily"
+    assert updated["activities"][0]["status"] == "ACTIVE"
+    assert "id" in updated["activities"][0]
+
+def test_apply_disruption():
+    matrix = {
+        "activities": [
+            {
+                "id": "act_1",
+                "child_name": "Emily",
+                "activity_title": "Soccer Camp",
+                "start_date": "2026-07-06",
+                "end_date": "2026-07-10",
+                "start_time": "09:00",
+                "end_time": "12:00",
+                "status": "ACTIVE"
+            }
+        ]
+    }
+    
+    disruption = {
+        "child_name": "Emily",
+        "date": "2026-07-07",
+        "start_time": "09:30",
+        "end_time": "10:30",
+        "description": "Nanny called out sick",
+        "disruption_type": "SICK_LEAVE"
+    }
+    
+    updated = apply_disruption(matrix, disruption)
+    assert updated["activities"][0]["status"] == "DISRUPTED"
+    assert "[DISRUPTED:" in updated["activities"][0]["notes"]
+
+def test_calculate_gaps_absolute(sample_profile):
+    # Test absolute gaps (Mon-Fri 9:00 to 17:00 / 540 to 1020)
+    # Emily has school from 8:30 to 15:00. Care window is 9:00 to 17:00.
+    # Therefore, she is covered from 9:00 to 15:00 by school.
+    # She has an absolute gap from 15:00 to 17:00.
+    
+    activities = []
+    start_date = parse_date("2026-07-06")  # Monday
+    end_date = parse_date("2026-07-06")
+    
+    gaps = calculate_gaps(activities, sample_profile, start_date, end_date)
+    
+    # We expect one absolute gap for Emily from 15:00 to 17:00
+    emily_gaps = [g for g in gaps if g["child_name"] == "Emily" and g["type"] == "ABSOLUTE"]
+    assert len(emily_gaps) == 1
+    assert emily_gaps[0]["start_time"] == "15:00"
+    assert emily_gaps[0]["end_time"] == "17:00"
+
+def test_calculate_gaps_relative(sample_profile):
+    # Test relative gaps (sibling mismatch)
+    # Emily has a camp from 9:00 to 12:00.
+    # Jack has only school (covered 9:00 to 15:00, gap 15:00 to 17:00).
+    # Since Emily has a camp from 9:00 to 12:00, and Jack is covered by school, they are both covered.
+    # But what if Jack has no school and no camp?
+    # Let's say Jack has an absolute gap from 9:00 to 12:00, while Emily is at camp.
+    # This should trigger a relative gap for Jack: Emily has camp, Jack has no care.
+    
+    profile_no_school = {
+        "children": [{"name": "Emily"}, {"name": "Jack"}],
+        "baseline_coverage": [] # No school
+    }
+    
+    activities = [
+        {
+            "child_name": "Emily",
+            "activity_title": "Soccer Camp",
+            "start_date": "2026-07-06",
+            "end_date": "2026-07-06",
+            "start_time": "09:00",
+            "end_time": "12:00",
+            "status": "ACTIVE"
+        }
+    ]
+    
+    start_date = parse_date("2026-07-06")
+    end_date = parse_date("2026-07-06")
+    
+    gaps = calculate_gaps(activities, profile_no_school, start_date, end_date)
+    
+    # Jack has an absolute gap from 9:00 to 17:00.
+    # He should also have a relative gap from 9:00 to 12:00 because Emily is at camp.
+    jack_rel_gaps = [g for g in gaps if g["child_name"] == "Jack" and g["type"] == "RELATIVE"]
+    assert len(jack_rel_gaps) == 1
+    assert jack_rel_gaps[0]["start_time"] == "09:00"
+    assert jack_rel_gaps[0]["end_time"] == "12:00"

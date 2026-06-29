@@ -1,0 +1,38 @@
+{
+  "parents": [
+    {
+      "name": "Sarah",
+      "email": "sarah.parent@example.com",
+      "phone": "555-123-4567"
+    },
+    {
+      "name": "John",
+      "email": "john.parent@example.com",
+      "phone": "555-987-6543"
+    }
+  ],
+  "children": [
+    {
+      "name": "Emily",
+      "age": 8
+    },
+    {
+      "name": "Jack",
+      "age": 6
+    }
+  ],
+  "address": "123 Elm Street, Springville",
+  "baseline_coverage": [
+    {
+      "name": "School",
+      "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+      "start_time": "08:30",
+      "end_time": "15:00",
+      "months": ["September", "October", "November", "December", "January", "February", "March", "April", "May", "June"]
+    }
+  ],
+  "google_calendar": {
+    "use_secondary_calendars": false,
+    "calendar_ids": {}
+  }
+}
