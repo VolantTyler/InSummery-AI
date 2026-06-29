@@ -38,6 +38,7 @@ async def pii_mask_node(ctx: Context, node_input: str) -> str:
     
     return masked_text
 
+@node(rerun_on_resume=True)
 async def triager_node(ctx: Context, node_input: str) -> str:
     """Classify the input text as registration, disruption, or general."""
     model = get_model_client()
@@ -64,41 +65,41 @@ async def triager_node(ctx: Context, node_input: str) -> str:
     ctx.route = category
     return category
 
-async def interpreter_node(ctx: Context, node_input: str) -> Any:
-    """Extract structured data from the masked text based on the classification."""
+@node(rerun_on_resume=True)
+async def interpreter_registration_node(ctx: Context, node_input: str) -> Any:
+    """Extract structured registration data from the masked text."""
     model = get_model_client()
-    category = ctx.state.get("category", "registration")
-    
-    if category == "registration":
-        agent = LlmAgent(
-            name="interpreter_agent_registration",
-            model=model,
-            instruction=(
-                "Extract all camp, class, school, or activity registrations from the email. "
-                "For each activity, extract the child's name, activity title, start/end dates (YYYY-MM-DD), "
-                "daily start/end times (HH:MM), location, and notes. "
-                "Assign a confidence score (0-100) on how confident you are in this extraction, "
-                "along with a brief evaluation trace explaining the score."
-            ),
-            output_schema=InterpretationResult
-        )
-        res = await ctx.run_node(agent, node_input)
-        return res
-    elif category == "disruption":
-        agent = LlmAgent(
-            name="interpreter_agent_disruption",
-            model=model,
-            instruction=(
-                "Extract the disruption details from the message. "
-                "Extract the child's name, the date of the disruption (YYYY-MM-DD), start/end times (HH:MM), "
-                "description, and the disruption type (CANCELLATION, DELAY, SICK_LEAVE)."
-            ),
-            output_schema=DisruptionDetail
-        )
-        res = await ctx.run_node(agent, node_input)
-        return res
-    else:
-        return {"activities": [], "confidence_score": 100, "evaluation_trace": "General inquiry"}
+    agent = LlmAgent(
+        name="interpreter_agent_registration",
+        model=model,
+        instruction=(
+            "Extract all camp, class, school, or activity registrations from the email. "
+            "For each activity, extract the child's name, activity title, start/end dates (YYYY-MM-DD), "
+            "daily start/end times (HH:MM), location, and notes. "
+            "Assign a confidence score (0-100) on how confident you are in this extraction, "
+            "along with a brief evaluation trace explaining the score."
+        ),
+        output_schema=InterpretationResult
+    )
+    res = await ctx.run_node(agent, node_input)
+    return res
+
+@node(rerun_on_resume=True)
+async def interpreter_disruption_node(ctx: Context, node_input: str) -> Any:
+    """Extract structured disruption data from the masked text."""
+    model = get_model_client()
+    agent = LlmAgent(
+        name="interpreter_agent_disruption",
+        model=model,
+        instruction=(
+            "Extract the disruption details from the message. "
+            "Extract the child's name, the date of the disruption (YYYY-MM-DD), start/end times (HH:MM), "
+            "description, and the disruption type (CANCELLATION, DELAY, SICK_LEAVE)."
+        ),
+        output_schema=DisruptionDetail
+    )
+    res = await ctx.run_node(agent, node_input)
+    return res
 
 async def confidence_gate_node(ctx: Context, node_input: Any) -> str:
     """Check the extraction confidence score and decide whether to route to HITL."""
@@ -185,14 +186,18 @@ async def matrix_analyzer_node(ctx: Context, node_input: Any) -> Dict[str, Any]:
     current_matrix = storage.get_matrix(user_id) or {"activities": [], "gaps": []}
     
     # 2. Merge or apply disruptions
+    extraction_result = ctx.state.get("extraction_result")
+    if extraction_result is None or isinstance(extraction_result, str):
+        extraction_result = node_input
+        
     if category == "registration":
         # Unmask activities
         raw_activities = []
         activities_list = []
-        if isinstance(node_input, InterpretationResult):
-            activities_list = node_input.activities
-        elif isinstance(node_input, dict):
-            activities_list = node_input.get("activities", [])
+        if isinstance(extraction_result, InterpretationResult):
+            activities_list = extraction_result.activities
+        elif isinstance(extraction_result, dict):
+            activities_list = extraction_result.get("activities", [])
             
         for act in activities_list:
             act_dict = act.model_dump() if hasattr(act, "model_dump") else dict(act)
@@ -205,7 +210,7 @@ async def matrix_analyzer_node(ctx: Context, node_input: Any) -> Dict[str, Any]:
             
         updated_matrix = merge_activities(current_matrix, raw_activities)
     elif category == "disruption":
-        dis_dict = node_input.model_dump() if hasattr(node_input, "model_dump") else dict(node_input)
+        dis_dict = extraction_result.model_dump() if hasattr(extraction_result, "model_dump") else dict(extraction_result)
         dis_dict["child_name"] = masker.unmask(dis_dict["child_name"])
         dis_dict["description"] = masker.unmask(dis_dict["description"])
         

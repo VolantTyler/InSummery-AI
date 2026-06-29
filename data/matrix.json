@@ -1,0 +1,90 @@
+{
+  "activities": [
+    {
+      "child_name": "Emily",
+      "activity_title": "Soccer Camp",
+      "start_date": "2023-07-06",
+      "end_date": "2023-07-10",
+      "start_time": "09:00",
+      "end_time": "12:00",
+      "location": "",
+      "notes": "",
+      "id": "100599d9",
+      "status": "ACTIVE"
+    }
+  ],
+  "gaps": [
+    {
+      "child_name": "Emily",
+      "date": "2023-07-06",
+      "start_time": "12:00",
+      "end_time": "17:00",
+      "type": "ABSOLUTE",
+      "description": "No care scheduled for Emily."
+    },
+    {
+      "child_name": "Jack",
+      "date": "2023-07-06",
+      "start_time": "09:00",
+      "end_time": "17:00",
+      "type": "ABSOLUTE",
+      "description": "No care scheduled for Jack."
+    },
+    {
+      "child_name": "Jack",
+      "date": "2023-07-06",
+      "start_time": "09:00",
+      "end_time": "12:00",
+      "type": "RELATIVE",
+      "description": "Sibling mismatch: Emily has an activity, but Jack has no care."
+    },
+    {
+      "child_name": "Emily",
+      "date": "2023-07-07",
+      "start_time": "12:00",
+      "end_time": "17:00",
+      "type": "ABSOLUTE",
+      "description": "No care scheduled for Emily."
+    },
+    {
+      "child_name": "Jack",
+      "date": "2023-07-07",
+      "start_time": "09:00",
+      "end_time": "17:00",
+      "type": "ABSOLUTE",
+      "description": "No care scheduled for Jack."
+    },
+    {
+      "child_name": "Jack",
+      "date": "2023-07-07",
+      "start_time": "09:00",
+      "end_time": "12:00",
+      "type": "RELATIVE",
+      "description": "Sibling mismatch: Emily has an activity, but Jack has no care."
+    },
+    {
+      "child_name": "Emily",
+      "date": "2023-07-10",
+      "start_time": "12:00",
+      "end_time": "17:00",
+      "type": "ABSOLUTE",
+      "description": "No care scheduled for Emily."
+    },
+    {
+      "child_name": "Jack",
+      "date": "2023-07-10",
+      "start_time": "09:00",
+      "end_time": "17:00",
+      "type": "ABSOLUTE",
+      "description": "No care scheduled for Jack."
+    },
+    {
+      "child_name": "Jack",
+      "date": "2023-07-10",
+      "start_time": "09:00",
+      "end_time": "12:00",
+      "type": "RELATIVE",
+      "description": "Sibling mismatch: Emily has an activity, but Jack has no care."
+    }
+  ]
+}
