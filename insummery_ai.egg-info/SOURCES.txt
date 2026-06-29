@@ -1,0 +1,9 @@
+README.md
+pyproject.toml
+app/storage.py
+insummery_ai.egg-info/PKG-INFO
+insummery_ai.egg-info/SOURCES.txt
+insummery_ai.egg-info/dependency_links.txt
+insummery_ai.egg-info/entry_points.txt
+insummery_ai.egg-info/requires.txt
+insummery_ai.egg-info/top_level.txt

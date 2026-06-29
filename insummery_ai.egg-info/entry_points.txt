@@ -1,0 +1,2 @@
+[console_scripts]
+summify = app.cli:main
