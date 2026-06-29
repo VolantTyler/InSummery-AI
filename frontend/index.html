@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Summify - Family Schedule Concierge</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <!-- App Container -->
+    <div id="app">
+        <!-- Auth View -->
+        <div id="auth-view" class="view hidden">
+            <div class="auth-card">
+                <div class="auth-header">
+                    <h2>Summify</h2>
+                    <p>Your Family Schedule Concierge</p>
+                </div>
+                
+                <div id="auth-error" class="alert alert-danger hidden"></div>
+                
+                <form id="login-form">
+                    <div class="form-group">
+                        <label for="email">Email Address</label>
+                        <input type="email" id="email" required placeholder="you@example.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" required placeholder="••••••••">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block" id="btn-login">Sign In</button>
+                </form>
+                
+                <div class="auth-divider">
+                    <span>or</span>
+                </div>
+                
+                <button id="btn-google" class="btn btn-outline btn-block">
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/action/google.svg" alt="Google Logo" class="google-icon">
+                    Sign in with Google
+                </button>
+                
+                <div class="auth-footer">
+                    <p>Don't have an account? <a href="#" id="link-toggle-signup">Sign Up</a></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dashboard View -->
+        <div id="dashboard-view" class="view hidden">
+            <!-- Header -->
+            <header>
+                <div class="header-brand">
+                    <h1>Summify</h1>
+                    <span class="badge">Concierge Active</span>
+                </div>
+                <div class="header-actions">
+                    <button class="theme-toggle" id="btn-theme-toggle">Dark Mode</button>
+                    <div class="user-profile">
+                        <span id="user-display-name">Loading...</span>
+                        <button id="btn-logout" class="btn btn-sm btn-outline">Sign Out</button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Main Content Area -->
+            <div class="main-container">
+                <!-- Sidebar -->
+                <aside class="sidebar">
+                    <!-- Ingest Section -->
+                    <div class="sidebar-card">
+                        <h3>Ingest Schedule</h3>
+                        <p class="section-desc">Paste an email, registration confirmation, or disruption notice.</p>
+                        <textarea id="ingest-input" placeholder="e.g., Emily is registered for Soccer Camp from July 6 to July 10, daily 9:00 to 12:00..."></textarea>
+                        
+                        <div class="ingest-options">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="check-disruption">
+                                <span>This is a schedule disruption</span>
+                            </label>
+                        </div>
+                        
+                        <button id="btn-submit-ingest" class="btn btn-primary btn-block">Process with AI</button>
+                        <div id="ingest-status" class="status-indicator hidden"></div>
+                    </div>
+
+                    <!-- Active Gaps -->
+                    <div class="sidebar-card">
+                        <h3>Active Gaps</h3>
+                        <div id="gaps-list" class="alerts-container">
+                            <div class="no-alerts">No active childcare gaps!</div>
+                        </div>
+                    </div>
+
+                    <!-- Disruptions -->
+                    <div class="sidebar-card">
+                        <h3>Disruptions & Warnings</h3>
+                        <div id="disruptions-list" class="alerts-container">
+                            <div class="no-alerts">No active disruptions.</div>
+                        </div>
+                    </div>
+                </aside>
+
+                <!-- Schedule Matrix Grid -->
+                <main class="content-area">
+                    <div class="matrix-header">
+                        <h2>Schedule Matrix</h2>
+                        <div class="matrix-legend">
+                            <span class="legend-item"><span class="color-box status-school"></span> School</span>
+                            <span class="legend-item"><span class="color-box status-active"></span> Active</span>
+                            <span class="legend-item"><span class="color-box status-disrupted"></span> Disrupted</span>
+                            <span class="legend-item"><span class="color-box status-gap"></span> Gap</span>
+                        </div>
+                    </div>
+
+                    <div id="matrix-container" class="matrix-grid">
+                        <!-- Filled dynamically -->
+                        <div class="loading-placeholder">Loading schedule matrix...</div>
+                    </div>
+                </main>
+            </div>
+        </div>
+
+        <!-- HITL Clarification Modal -->
+        <div id="hitl-modal" class="modal-overlay hidden">
+            <div class="modal-card">
+                <div class="modal-header">
+                    <h3>Clarification Required</h3>
+                </div>
+                <div class="modal-body">
+                    <p id="hitl-question-text">The AI needs some clarification to process this schedule.</p>
+                    <textarea id="hitl-response-input" placeholder="Type your response here..."></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button id="btn-submit-hitl" class="btn btn-primary">Submit Response</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { 
+            getAuth, 
+            signInWithEmailAndPassword, 
+            createUserWithEmailAndPassword,
+            signInWithPopup,
+            GoogleAuthProvider,
+            signOut,
+            onAuthStateChanged
+        } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+
+        window.FirebaseLib = {
+            initializeApp,
+            getAuth,
+            signInWithEmailAndPassword,
+            createUserWithEmailAndPassword,
+            signInWithPopup,
+            GoogleAuthProvider,
+            signOut,
+            onAuthStateChanged
+        };
+    </script>
+
+    <!-- App Script -->
+    <script src="app.js" type="module"></script>
+</body>
+</html>
