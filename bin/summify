@@ -1,0 +1,21 @@
+#!/usr/bin/env python3
+import os
+import sys
+
+# Add the project root to the python path to allow imports when running directly
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, project_root)
+
+# 1. Initialize telemetry BEFORE importing your agent or workflow nodes
+from app.telemetry import setup_telemetry
+setup_telemetry()
+
+# 2. Now it is safe to import modules that use the GenAI Client
+from app.agent import workflow
+
+def main():
+    print("Summify CLI started successfully with OpenTelemetry enabled.")
+    # Here the CLI will eventually parse arguments and execute the workflow.
+
+if __name__ == "__main__":
+    main()

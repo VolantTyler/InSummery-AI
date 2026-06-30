@@ -1,0 +1,32 @@
+[project]
+name = "insummery-ai"
+version = "0.1.0"
+description = "Summify: A concierge agent network for family scheduling and childcare gap analysis"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "google-adk>=0.1.0",
+    "mcp>=0.1.0",
+    "google-auth>=2.0.0",
+    "google-api-python-client>=2.0.0",
+    "pydantic>=2.0.0",
+    "jinja2>=3.0.0",
+    "opentelemetry-api>=1.25.0",
+    "opentelemetry-sdk>=1.25.0",
+    "opentelemetry-instrumentation-google-genai>=0.7b0",
+    "opentelemetry-util-genai[upload]>=0.3b0,<0.4b0",
+    "gcsfs>=2024.3.0",
+    "opentelemetry-exporter-gcp-trace>=1.6.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+]
