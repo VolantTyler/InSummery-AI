@@ -121,3 +121,7 @@ env/
 *.njsproj
 *.sln
 *.sw?
+
+# Java JDK
+jdk-*/
+jdk/

@@ -1,0 +1,52 @@
+{
+  "parents": [
+    {
+      "name": "Sarah",
+      "email": "sarah.smith@example.com",
+      "phone": "555-010-0001"
+    },
+    {
+      "name": "John",
+      "email": "john.smith@example.com",
+      "phone": "555-010-0002"
+    }
+  ],
+  "children": [
+    {"name": "Emily", "age": 10},
+    {"name": "Jack", "age": 8},
+    {"name": "Sophia", "age": 12},
+    {"name": "Liam", "age": 7},
+    {"name": "Olivia", "age": 9},
+    {"name": "Noah", "age": 11},
+    {"name": "Emma", "age": 5},
+    {"name": "Lucas", "age": 6},
+    {"name": "Ava", "age": 13},
+    {"name": "Ethan", "age": 14}
+  ],
+  "caregivers": [
+    {
+      "name": "Jessica",
+      "email": "jessica.nanny@example.com",
+      "phone": "555-010-0003"
+    },
+    {
+      "name": "David",
+      "email": "david.sitter@example.com",
+      "phone": "555-010-0004"
+    }
+  ],
+  "address": "555 Pine Lane, Springville",
+  "baseline_coverage": [
+    {
+      "name": "School",
+      "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+      "start_time": "08:30",
+      "end_time": "15:00",
+      "months": ["September", "October", "November", "December", "January", "February", "March", "April", "May", "June"]
+    }
+  ],
+  "google_calendar": {
+    "use_secondary_calendars": false,
+    "calendar_ids": {}
+  }
+}

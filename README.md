@@ -97,12 +97,12 @@ In web mode, the application runs a local Firebase emulator suite (Auth, Firesto
    firebase emulators:start
    ```
    This will start:
-   - **Hosting** at `http://localhost:8080` (Serving the frontend)
+   - **Hosting** at `http://localhost:5000` (Serving the frontend)
    - **Cloud Functions** at `http://localhost:5001`
    - **Firestore** at `http://localhost:8080` / Emulator UI at `http://localhost:4000`
 
 2. **Access the Web Dashboard**:
-   Open your browser and navigate to `http://localhost:8080/`.
+   Open your browser and navigate to `http://localhost:5000/`.
 
 3. **Verify the Onboarding Flow**:
    - Sign up with any email and password.
