@@ -1,10 +1,3 @@
-<<<<<<< HEAD
-# Summify agent workflow skeleton
-from google.adk.workflow import Workflow
-
-# Define a simple workflow placeholder
-workflow = Workflow(name="summify_workflow")
-=======
 from google.adk import Workflow
 from app.nodes import (
     pii_mask_node,
@@ -37,4 +30,3 @@ summify_workflow = Workflow(
         (hitl_node, matrix_analyzer_node)
     ]
 )
->>>>>>> 06422c5fe6db78fdf6f89312d28fd1b410973ed1
