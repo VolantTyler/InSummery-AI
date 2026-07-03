@@ -1,0 +1,116 @@
+import { initializeApp } from "firebase/app";
+import {
+    getAuth,
+    signInWithEmailAndPassword,
+    createUserWithEmailAndPassword,
+    signInWithPopup,
+    GoogleAuthProvider,
+    signOut,
+    onAuthStateChanged
+} from "firebase/auth";
+
+// Firebase configuration (uses local emulator config by default, can be customized)
+const firebaseConfig = {
+    apiKey: "mock-api-key",
+    authDomain: "insummery-ai.firebaseapp.com",
+    projectId: "insummery-ai",
+    storageBucket: "insummery-ai.appspot.com",
+    messagingSenderId: "123456789",
+    appId: "1:123456789:web:abcdef"
+};
+
+const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
+export { GoogleAuthProvider };
+
+// API URL (default to local emulator, can be overridden at build time)
+export const API_URL =
+    import.meta.env.VITE_API_URL || "http://127.0.0.1:5001/insummery-ai/us-central1/api";
+
+// Check if we should use mock auth (if API key is mock-api-key or invalid)
+const useMockAuth = firebaseConfig.apiKey === "mock-api-key";
+
+// Mock Auth State
+let mockAuthStateListener = null;
+const mockAuth = {
+    currentUser: null,
+    async getIdToken() {
+        return "mock-firebase-id-token";
+    }
+};
+
+// Initialize mock user from localStorage
+if (useMockAuth) {
+    const savedUser = localStorage.getItem("mock_current_user");
+    if (savedUser) {
+        const parsed = JSON.parse(savedUser);
+        parsed.getIdToken = async () => "mock-firebase-id-token";
+        mockAuth.currentUser = parsed;
+    }
+}
+
+// Mock Auth Functions
+const mockSignInWithEmailAndPassword = async (authObj, email, password) => {
+    const users = JSON.parse(localStorage.getItem("mock_users") || "[]");
+    const user = users.find(u => u.email === email);
+    if (!user) {
+        throw new Error("Firebase: Error (auth/user-not-found).");
+    }
+    if (user.password !== password) {
+        throw new Error("Firebase: Error (auth/wrong-password).");
+    }
+    const currentUserObj = { email, displayName: email.split("@")[0], getIdToken: async () => "mock-firebase-id-token" };
+    mockAuth.currentUser = currentUserObj;
+    localStorage.setItem("mock_current_user", JSON.stringify(currentUserObj));
+    if (mockAuthStateListener) mockAuthStateListener(currentUserObj);
+    return { user: currentUserObj };
+};
+
+const mockCreateUserWithEmailAndPassword = async (authObj, email, password) => {
+    const users = JSON.parse(localStorage.getItem("mock_users") || "[]");
+    if (users.some(u => u.email === email)) {
+        throw new Error("Firebase: Error (auth/email-already-in-use).");
+    }
+    users.push({ email, password });
+    localStorage.setItem("mock_users", JSON.stringify(users));
+
+    const currentUserObj = { email, displayName: email.split("@")[0], getIdToken: async () => "mock-firebase-id-token" };
+    mockAuth.currentUser = currentUserObj;
+    localStorage.setItem("mock_current_user", JSON.stringify(currentUserObj));
+    if (mockAuthStateListener) mockAuthStateListener(currentUserObj);
+    return { user: currentUserObj };
+};
+
+const mockSignInWithPopup = async (authObj, provider) => {
+    const email = prompt("Enter Google Account Email to Sign In (SSO Simulation):", "tyler@example.com");
+    if (!email) {
+        throw new Error("Firebase: Error (auth/popup-closed-by-user).");
+    }
+    const currentUserObj = { email, displayName: email.split("@")[0], getIdToken: async () => "mock-firebase-id-token" };
+    mockAuth.currentUser = currentUserObj;
+    localStorage.setItem("mock_current_user", JSON.stringify(currentUserObj));
+    if (mockAuthStateListener) mockAuthStateListener(currentUserObj);
+    return { user: currentUserObj };
+};
+
+const mockSignOut = async (authObj) => {
+    mockAuth.currentUser = null;
+    localStorage.removeItem("mock_current_user");
+    if (mockAuthStateListener) mockAuthStateListener(null);
+};
+
+const mockOnAuthStateChanged = (authObj, callback) => {
+    mockAuthStateListener = callback;
+    // Trigger initial state
+    setTimeout(() => {
+        callback(mockAuth.currentUser);
+    }, 50);
+    return () => { mockAuthStateListener = null; };
+};
+
+// Wrapped Auth Functions (mock in emulator mode, real Firebase otherwise)
+export const authSignIn = useMockAuth ? mockSignInWithEmailAndPassword : signInWithEmailAndPassword;
+export const authSignUp = useMockAuth ? mockCreateUserWithEmailAndPassword : createUserWithEmailAndPassword;
+export const authSignInPopup = useMockAuth ? mockSignInWithPopup : signInWithPopup;
+export const authSignOut = useMockAuth ? mockSignOut : signOut;
+export const authOnStateChanged = useMockAuth ? mockOnAuthStateChanged : onAuthStateChanged;

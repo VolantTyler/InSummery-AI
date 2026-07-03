@@ -22,7 +22,7 @@ It features a multi-agent network built using the **Google Agent Development Kit
 ## Tech Stack & Architecture
 
 - **Backend**: Python 3.10+, Google ADK 2.0, Pydantic, Firebase Cloud Functions (Python), Firestore.
-- **Frontend**: HTML5, Vanilla CSS3 (with responsive layouts, dark/light modes, and micro-animations), JavaScript (ES modules).
+- **Frontend**: Vite + React with vanilla CSS (responsive layouts, dark/light modes, and micro-animations).
 - **Authentication**: Firebase Auth (supports Email/Password and Google SSO).
 - **CLI**: Click/Argparse Python-based terminal runner.
 
@@ -89,9 +89,20 @@ In local mode, the CLI uses local JSON files for storage (`config/profile.json` 
 ---
 
 ### Option B: Web App Mode (With Firebase Emulator)
-In web mode, the application runs a local Firebase emulator suite (Auth, Firestore, Hosting, and Cloud Functions).
+In web mode, the application runs a local Firebase emulator suite (Auth, Firestore, Hosting, and Cloud Functions). The frontend is a Vite + React app located in `frontend/`.
 
-1. **Start the Firebase Emulators**:
+1. **Build the frontend**:
+   ```bash
+   cd frontend
+   npm install
+   npm run build
+   cd ..
+   ```
+   Firebase Hosting serves the built app from `frontend/dist`.
+
+   *For frontend development with hot reload, run `npm run dev` inside `frontend/` instead (the dev server runs at `http://localhost:5173` and talks to the Cloud Functions emulator directly; override the API endpoint with a `VITE_API_URL` env var if needed).*
+
+2. **Start the Firebase Emulators**:
    From the project root, run:
    ```bash
    firebase emulators:start
@@ -101,10 +112,10 @@ In web mode, the application runs a local Firebase emulator suite (Auth, Firesto
    - **Cloud Functions** at `http://localhost:5001`
    - **Firestore** at `http://localhost:8080` / Emulator UI at `http://localhost:4000`
 
-2. **Access the Web Dashboard**:
+3. **Access the Web Dashboard**:
    Open your browser and navigate to `http://localhost:5000/`.
 
-3. **Verify the Onboarding Flow**:
+4. **Verify the Onboarding Flow**:
    - Sign up with any email and password.
    - You will be prompted with the **Welcome / Onboarding** screen.
    - Enter your family details (parents, children, and nannies).
