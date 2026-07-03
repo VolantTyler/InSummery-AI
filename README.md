@@ -1,6 +1,6 @@
-# Summify - Family Schedule Concierge
+# InSummery - Family Schedule Concierge
 
-Summify is an AI-powered family schedule assistant designed to ingest chaotic, unstructured scheduling emails (such as camp registrations, school calendars, or nanny updates), parse them into a structured family schedule, detect childcare gaps, and handle real-time disruptions.
+InSummery is an AI-powered family schedule assistant designed to ingest chaotic, unstructured scheduling emails (such as camp registrations, school calendars, or nanny updates), parse them into a structured family schedule, detect childcare gaps, and handle real-time disruptions.
 
 It features a multi-agent network built using the **Google Agent Development Kit (ADK 2.0)**, a custom **PII Data-Masking Framework** to protect family privacy, and supports both a local command-line interface (CLI) and a web application integrated with **Firebase** and **Google Calendar**.
 
@@ -75,12 +75,12 @@ In local mode, the CLI uses local JSON files for storage (`config/profile.json` 
 
 2. **Ingest a scheduling email**:
    ```bash
-   python bin/summify --mode local --input "Emily is registered for Soccer Camp from July 6 to July 10, daily 9:00 to 12:00."
+   python bin/insummery --mode local --input "Emily is registered for Soccer Camp from July 6 to July 10, daily 9:00 to 12:00."
    ```
 
 3. **Ingest a schedule disruption**:
    ```bash
-   python bin/summify --mode local --disruption "Nanny Jessica called out sick for Tuesday July 7th."
+   python bin/insummery --mode local --disruption "Nanny Jessica called out sick for Tuesday July 7th."
    ```
 
 4. **Review the local dashboard**:

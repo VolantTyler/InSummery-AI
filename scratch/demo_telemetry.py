@@ -12,7 +12,7 @@ setup_telemetry()
 
 # Get the tracer
 from opentelemetry import trace
-tracer = trace.get_tracer("summify.demo")
+tracer = trace.get_tracer("insummery.demo")
 
 print("\n=== STARTING SIMULATED GENAI INFERENCE SPAN ===\n")
 
@@ -22,9 +22,9 @@ with tracer.start_as_current_span("gen_ai.client.inference") as span:
     span.set_attribute("gen_ai.request.model", "gemini-2.5-flash")
     
     # Set the OTel GenAI references to the uploaded prompt and response files
-    span.set_attribute("gen_ai.input.messages_ref", "gs://summify-telemetry-bucket/2026-06-30/input_abc123.jsonl")
-    span.set_attribute("gen_ai.output.messages_ref", "gs://summify-telemetry-bucket/2026-06-30/output_abc123.jsonl")
-    span.set_attribute("gen_ai.system_instructions_ref", "gs://summify-telemetry-bucket/2026-06-30/system_instruction_abc123.jsonl")
+    span.set_attribute("gen_ai.input.messages_ref", "gs://insummery-telemetry-bucket/2026-06-30/input_abc123.jsonl")
+    span.set_attribute("gen_ai.output.messages_ref", "gs://insummery-telemetry-bucket/2026-06-30/output_abc123.jsonl")
+    span.set_attribute("gen_ai.system_instructions_ref", "gs://insummery-telemetry-bucket/2026-06-30/system_instruction_abc123.jsonl")
     
     # Simulate some latency
     print("Processing GenAI request...")

@@ -1,6 +1,6 @@
-# Project Plan & Requirements: Summify ("In Summary:")
+# Project Plan & Requirements: InSummery ("In Summary:")
 
-Summify is a concierge agent designed to ingest chaotic inbound scheduling emails (such as camp registrations or nanny updates), interpret them, maintain a multi-child schedule matrix, detect childcare gaps, and handle real-time disruptions. It features a 4-agent network built using the **Google Agent Development Kit (ADK 2.0)**, a custom **Model Context Protocol (MCP) Server** for local storage and Google Calendar integration, a **PII Data-Masking Framework** to protect family privacy, and a command-line interface (CLI) for seamless execution.
+InSummery is a concierge agent designed to ingest chaotic inbound scheduling emails (such as camp registrations or nanny updates), interpret them, maintain a multi-child schedule matrix, detect childcare gaps, and handle real-time disruptions. It features a 4-agent network built using the **Google Agent Development Kit (ADK 2.0)**, a custom **Model Context Protocol (MCP) Server** for local storage and Google Calendar integration, a **PII Data-Masking Framework** to protect family privacy, and a command-line interface (CLI) for seamless execution.
 
 ---
 
@@ -45,7 +45,7 @@ Summify is a concierge agent designed to ingest chaotic inbound scheduling email
 - **Approach**: If the workflow's confidence score is < 80% (low confidence):
   - In **Local Mode**: The CLI will save the paused workflow state to a local file at `data/pending_workflow.json`, print the clarification question, and exit.
   - In **Production Mode**: The backend will save the paused workflow state to Firestore under `users/{userId}/pending_workflows/{workflowId}`. The user will be notified in the web dashboard, where they can answer the clarification question.
-  - The user can resume the workflow via the CLI (`summify --resume '<clarification_input>'`) or the web UI.
+  - The user can resume the workflow via the CLI (`insummery --resume '<clarification_input>'`) or the web UI.
 
 ### 7. Firebase Authentication & Backend Hosting
 - **Authentication**: Users sign in to the web application using **Firebase Auth** via Google SSO or Email/Password.
@@ -67,7 +67,7 @@ graph TD
     subgraph Frontend [Web Frontend / CLI]
         Input[Raw Email / Disruption Text]
         UI[React Web App / Local HTML]
-        CLI[Summify CLI]
+        CLI[InSummery CLI]
     end
 
     subgraph Backend [Firebase Cloud Functions / Local Run]
@@ -173,7 +173,7 @@ Responsive vanilla CSS styling implementing a premium dark/light mode, high-cont
 
 ### 4. Execution & CLI Layer
 
-#### [NEW] [summify](file:///c:/Users/tyler/Git/InSummery-AI/bin/summify)
+#### [NEW] [insummery](file:///c:/Users/tyler/Git/InSummery-AI/bin/insummery)
 An executable CLI script that:
 - Accepts raw text input via `--input` or `--disruption`.
 - Supports a `--mode` flag (`local` or `firebase`).
@@ -184,7 +184,7 @@ An executable CLI script that:
 - Displays the final HTML grid path and lists alert banners.
 
 #### [NEW] [pyproject.toml](file:///c:/Users/tyler/Git/InSummery-AI/pyproject.toml)
-Configures project dependencies (`google-adk`, `google-auth`, `google-api-python-client`, `pydantic`, `jinja2`, `firebase-admin`, `requests`) and registers the `summify` CLI command.
+Configures project dependencies (`google-adk`, `google-auth`, `google-api-python-client`, `pydantic`, `jinja2`, `firebase-admin`, `requests`) and registers the `insummery` CLI command.
 
 #### [NEW] [firebase.json](file:///c:/Users/tyler/Git/InSummery-AI/firebase.json)
 Configures Firebase Hosting, Cloud Functions, and Firestore.
@@ -207,16 +207,16 @@ We will write unit and integration tests under the `tests/` directory:
 ### Manual Verification
 1. **Local CLI Disruption Demo**: Run:
    ```bash
-   python bin/summify --mode local --disruption "Nanny called out sick for Tuesday July 7th"
+   python bin/insummery --mode local --disruption "Nanny called out sick for Tuesday July 7th"
    ```
    Verify that the system detects the disruption, recalculates the matrix, flags a childcare gap, and generates the HTML dashboard.
 2. **Asynchronous HITL Flow Demo**: Run the CLI with ambiguous text in local mode:
    ```bash
-   python bin/summify --mode local --input "Camp next week for Tyler"
+   python bin/insummery --mode local --input "Camp next week for Tyler"
    ```
    Verify that the CLI exits, saves the paused state to `data/pending_workflow.json`, and prints the clarification question. Resume it using:
    ```bash
-   python bin/summify --mode local --resume "I mean soccer camp at 9am"
+   python bin/insummery --mode local --resume "I mean soccer camp at 9am"
    ```
    Verify that the workflow resumes and successfully finishes.
 3. **Web Interface & Firebase Auth**: Run the Vite dev server, register a user using email/password, and log in. Test the Google SSO flow.

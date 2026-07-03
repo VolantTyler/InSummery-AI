@@ -1,4 +1,4 @@
-Here is your cheat sheet outlining the core themes, concepts, and technical focuses of each day from the Kaggle 5-Day AI Agents course. Use this to ensure your "Summify" project directly demonstrates what you have learned:
+Here is your cheat sheet outlining the core themes, concepts, and technical focuses of each day from the Kaggle 5-Day AI Agents course. Use this to ensure your "InSummery" project directly demonstrates what you have learned:
 
 ### 🎒 Day 1: Introduction to Agents & Vibe Coding
 
