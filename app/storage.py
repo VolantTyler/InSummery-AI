@@ -111,7 +111,10 @@ class FirestoreStorageProvider(StorageProvider):
         try:
             self.db = firestore.client()
         except ValueError:
-            firebase_admin.initialize_app()
+            if os.getenv("FIRESTORE_EMULATOR_HOST") or os.getenv("FIREBASE_AUTH_EMULATOR_HOST"):
+                firebase_admin.initialize_app(options={"projectId": "insummery-ai"})
+            else:
+                firebase_admin.initialize_app()
             self.db = firestore.client()
 
     def get_profile(self, user_id: str) -> Optional[Dict[str, Any]]:
