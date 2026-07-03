@@ -1,0 +1,122 @@
+[
+  {
+    "id": "case_01",
+    "filename": "case_01_emily_soccer.txt",
+    "child_name": "Emily",
+    "activity_title": "Junior Striker Soccer Camp (Ages 9-11)",
+    "start_date": "2026-07-06",
+    "end_date": "2026-07-10",
+    "start_time": "09:00",
+    "end_time": "12:00",
+    "location": "Green Valley Sports Complex, Pitch 3, 789 Athletic Way, Springville",
+    "notes": "Coach: Dave Miller (Contact: coach.dave@greenvalleysoccer.com). Wear shin guards, bring a labeled water bottle and a small healthy snack. Drop-off begins at 8:45 AM. Sign-in/out required."
+  },
+  {
+    "id": "case_02",
+    "filename": "case_02_jack_robotics.txt",
+    "child_name": "Jack",
+    "activity_title": "Astro Academy: Space & Robotics Camp (Full Day)",
+    "start_date": "2026-07-13",
+    "end_date": "2026-07-17",
+    "start_time": "09:00",
+    "end_time": "15:00",
+    "location": "Science Museum, Room 204, 100 Innovation Blvd, Springville",
+    "notes": "Pack peanut-free lunch/snacks, closed-toe shoes required, apply sunscreen. Order ID: ST-2026-990812."
+  },
+  {
+    "id": "case_03",
+    "filename": "case_03_sophia_art.txt",
+    "child_name": "Sophia",
+    "activity_title": "Teen Fine Arts & Portfolio Intensive (2-Week Program)",
+    "start_date": "2026-07-06",
+    "end_date": "2026-07-17",
+    "start_time": "10:00",
+    "end_time": "16:00",
+    "location": "Creative Minds Studio (Main Loft), 456 Art Alley, Springville",
+    "notes": "Elena Rostova, Creative Director. $50 materials fee due on first day. Wear studio clothes, bring bag lunch."
+  },
+  {
+    "id": "case_04",
+    "filename": "case_04_liam_wilderness.txt",
+    "child_name": "Liam",
+    "activity_title": "Wilderness Survival Camp - Level 1",
+    "start_date": "2026-07-20",
+    "end_date": "2026-07-24",
+    "start_time": "08:30",
+    "end_time": "16:30",
+    "location": "Pine Ridge Nature Reserve (North Gate Ranger Station), 10400 Reserve Road, Springville",
+    "notes": "Camp Director Mark Fletcher. Sturdy closed-toe hiking shoes, bug spray, SPF 30+ sunscreen, rain jacket, water bottle, nut-free lunch, 2 snacks."
+  },
+  {
+    "id": "case_05",
+    "filename": "case_05_olivia_theater.txt",
+    "child_name": "Olivia",
+    "activity_title": "Broadway Bound Theater Camp (Ages 8-10)",
+    "start_date": "2026-07-27",
+    "end_date": "2026-08-07",
+    "start_time": "09:00",
+    "end_time": "14:00",
+    "location": "Community Playhouse, Main Stage, 321 Theater Row, Springville",
+    "notes": "Stage manager Chloe Davis. Special extended hours on Friday, August 7th (Performance at 6:00 PM). Comfort clothing, bring script and lunch."
+  },
+  {
+    "id": "case_06",
+    "filename": "case_06_noah_coding.txt",
+    "child_name": "Noah",
+    "activity_title": "Roblox Game Design & Coding (Half-Day Session)",
+    "start_date": "2026-06-29",
+    "end_date": "2026-07-03",
+    "start_time": "13:00",
+    "end_time": "16:00",
+    "location": "Code Ninjas Center, Suite 102, 888 Tech Way, Springville",
+    "notes": "Sensei Alex. Laptop with Roblox Studio, Roblox account, and USB mouse required."
+  },
+  {
+    "id": "case_07",
+    "filename": "case_07_emma_preschool.txt",
+    "child_name": "Emma",
+    "activity_title": "Little Explorers Week (Half-Day Morning)",
+    "start_date": "2026-07-13",
+    "end_date": "2026-07-17",
+    "start_time": "09:00",
+    "end_time": "12:00",
+    "location": "Sunshine Preschool, Classroom A (Blue Door), 202 Meadow Lane, Springville",
+    "notes": "Miss Clara. Must be potty trained. Pack spare clothes, closed-toe velcro shoes, apply sunscreen. Snack provided."
+  },
+  {
+    "id": "case_08",
+    "filename": "case_08_lucas_tennis.txt",
+    "child_name": "Lucas",
+    "activity_title": "Junior Development Tennis Camp (Under-8 Division)",
+    "start_date": "2026-07-20",
+    "end_date": "2026-07-24",
+    "start_time": "13:30",
+    "end_time": "16:30",
+    "location": "Municipal Tennis Courts (Courts 5-8), 500 Court Drive, Springville",
+    "notes": "Head Pro Marcus Vance. Non-marking tennis shoes only. Racquet rental included. Rain plan: move to main dome."
+  },
+  {
+    "id": "case_09",
+    "filename": "case_09_ava_leadership.txt",
+    "child_name": "Ava",
+    "activity_title": "Global Leaders Forum - Youth Leadership Summit",
+    "start_date": "2026-08-03",
+    "end_date": "2026-08-07",
+    "start_time": "09:00",
+    "end_time": "17:00",
+    "location": "State University, Student Union (Grand Ballroom), 1200 University Parkway, Springville",
+    "notes": "Cohort Delta, mentor Dr. Aris Thorne. Business casual, bring laptop/tablet, lunch provided."
+  },
+  {
+    "id": "case_10",
+    "filename": "case_10_ethan_basketball.txt",
+    "child_name": "Ethan",
+    "activity_title": "Advanced Boys Basketball Skills Clinic",
+    "start_date": "2026-07-27",
+    "end_date": "2026-07-31",
+    "start_time": "08:00",
+    "end_time": "11:00",
+    "location": "Springville High School Gym, 800 Varsity Drive, Springville",
+    "notes": "Coach Terry Higgins. Regulation basketball (29.5\"), indoor court shoes, reversible jersey, water bottle."
+  }
+]

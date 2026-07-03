@@ -41,6 +41,24 @@ class PIIMasker:
         if address:
             self._add_mapping(address, "[ADDRESS_1]")
 
+        # 4. Map caregivers/nannies
+        caregivers = self.profile.get("caregivers", [])
+        for i, caregiver in enumerate(caregivers):
+            name = caregiver.get("name")
+            if name:
+                placeholder = f"[CAREGIVER_{chr(65 + i)}]" # [CAREGIVER_A], [CAREGIVER_B], etc.
+                self._add_mapping(name, placeholder)
+            
+            email = caregiver.get("email")
+            if email:
+                placeholder = f"[CAREGIVER_EMAIL_{i + 1}]"
+                self._add_mapping(email, placeholder)
+            
+            phone = caregiver.get("phone")
+            if phone:
+                placeholder = f"[CAREGIVER_PHONE_{i + 1}]"
+                self._add_mapping(phone, placeholder)
+
     def _add_mapping(self, original: str, placeholder: str) -> None:
         if not original:
             return

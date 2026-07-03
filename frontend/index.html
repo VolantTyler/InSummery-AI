@@ -49,6 +49,59 @@
             </div>
         </div>
 
+        <!-- Onboarding View -->
+        <div id="onboarding-view" class="view hidden">
+            <div class="onboarding-card">
+                <div class="onboarding-header">
+                    <h2>Welcome to Summify</h2>
+                    <p>Let's set up your family profile to get started.</p>
+                </div>
+                
+                <form id="onboarding-form">
+                    <!-- Parents Section -->
+                    <div class="form-section">
+                        <h3>Parents / Guardians</h3>
+                        <div id="onboarding-parents-container">
+                            <div class="form-row parent-row">
+                                <input type="text" class="parent-name" placeholder="Parent Name" required>
+                                <input type="email" class="parent-email" placeholder="Email (optional)">
+                                <input type="text" class="parent-phone" placeholder="Phone (optional)">
+                                <button type="button" class="btn-remove-row hidden">&times;</button>
+                            </div>
+                        </div>
+                        <button type="button" id="btn-add-onboarding-parent" class="btn btn-sm btn-outline">+ Add Parent</button>
+                    </div>
+
+                    <!-- Children Section -->
+                    <div class="form-section">
+                        <h3>Children</h3>
+                        <div id="onboarding-children-container">
+                            <div class="form-row child-row">
+                                <input type="text" class="child-name" placeholder="Child's Name" required>
+                                <input type="number" class="child-age" placeholder="Age" required min="0" max="18">
+                                <button type="button" class="btn-remove-row hidden">&times;</button>
+                            </div>
+                        </div>
+                        <button type="button" id="btn-add-onboarding-child" class="btn btn-sm btn-outline">+ Add Child</button>
+                    </div>
+
+                    <!-- Caregivers Section -->
+                    <div class="form-section">
+                        <h3>Nannies / Caregivers</h3>
+                        <div id="onboarding-caregivers-container">
+                            <div class="form-row caregiver-row">
+                                <input type="text" class="caregiver-name" placeholder="Nanny / Caregiver Name">
+                                <button type="button" class="btn-remove-row hidden">&times;</button>
+                            </div>
+                        </div>
+                        <button type="button" id="btn-add-onboarding-caregiver" class="btn btn-sm btn-outline">+ Add Caregiver</button>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-block">Complete Onboarding</button>
+                </form>
+            </div>
+        </div>
+
         <!-- Dashboard View -->
         <div id="dashboard-view" class="view hidden">
             <!-- Header -->
@@ -58,6 +111,7 @@
                     <span class="badge">Concierge Active</span>
                 </div>
                 <div class="header-actions">
+                    <button class="btn btn-sm btn-outline" id="btn-open-profile">Family Profile</button>
                     <button class="theme-toggle" id="btn-theme-toggle">Dark Mode</button>
                     <div class="user-profile">
                         <span id="user-display-name">Loading...</span>
@@ -121,6 +175,43 @@
                         <div class="loading-placeholder">Loading schedule matrix...</div>
                     </div>
                 </main>
+            </div>
+        </div>
+
+        <!-- Family Profile Modal -->
+        <div id="profile-modal" class="modal-overlay hidden">
+            <div class="modal-card profile-modal-card">
+                <div class="modal-header">
+                    <h3>Family Profile Settings</h3>
+                    <button class="modal-close" id="btn-close-profile">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="profile-form">
+                        <!-- Parents Section -->
+                        <div class="form-section">
+                            <h4>Parents / Guardians</h4>
+                            <div id="profile-parents-container"></div>
+                            <button type="button" id="btn-add-profile-parent" class="btn btn-sm btn-outline">+ Add Parent</button>
+                        </div>
+
+                        <!-- Children Section -->
+                        <div class="form-section">
+                            <h4>Children</h4>
+                            <div id="profile-children-container"></div>
+                            <button type="button" id="btn-add-profile-child" class="btn btn-sm btn-outline">+ Add Child</button>
+                        </div>
+
+                        <!-- Caregivers Section -->
+                        <div class="form-section">
+                            <h4>Nannies / Caregivers</h4>
+                            <div id="profile-caregivers-container"></div>
+                            <button type="button" id="btn-add-profile-caregiver" class="btn btn-sm btn-outline">+ Add Caregiver</button>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button id="btn-save-profile" class="btn btn-primary">Save Changes</button>
+                </div>
             </div>
         </div>
 

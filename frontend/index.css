@@ -646,3 +646,135 @@ header {
     justify-content: flex-end;
     margin-top: 24px;
 }
+
+/* Onboarding View */
+#onboarding-view {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 40px 20px;
+    background: linear-gradient(135deg, var(--primary-light) 0%, var(--bg-color) 100%);
+    overflow-y: auto;
+}
+
+.onboarding-card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 24px;
+    padding: 40px;
+    width: 100%;
+    max-width: 680px;
+    box-shadow: var(--shadow-lg);
+    animation: scaleUp 0.3s ease-out;
+}
+
+.onboarding-header {
+    text-align: center;
+    margin-bottom: 32px;
+}
+
+.onboarding-header h2 {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--primary);
+    margin-bottom: 8px;
+}
+
+.onboarding-header p {
+    color: var(--text-muted);
+    font-size: 16px;
+}
+
+/* Form Sections */
+.form-section {
+    margin-bottom: 32px;
+    padding: 20px;
+    background-color: var(--bg-color);
+    border-radius: 16px;
+    border: 1px solid var(--border-color);
+}
+
+.form-section h3, .form-section h4 {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    color: var(--text-color);
+}
+
+.form-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+    align-items: center;
+    animation: fadeIn 0.2s ease-out;
+}
+
+.form-row input {
+    flex: 1;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background-color: var(--card-bg);
+    color: var(--text-color);
+    font-family: inherit;
+    font-size: 14px;
+}
+
+.form-row input:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.form-row input[type="number"] {
+    max-width: 80px;
+}
+
+.btn-remove-row {
+    background: none;
+    border: none;
+    color: var(--danger-text);
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s;
+}
+
+.btn-remove-row:hover {
+    color: #a61c1a;
+}
+
+/* Profile Modal overrides */
+.profile-modal-card {
+    max-width: 685px;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 16px;
+    margin-bottom: 20px;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 28px;
+    color: var(--text-muted);
+    cursor: pointer;
+    line-height: 1;
+}
+
+.modal-close:hover {
+    color: var(--text-color);
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
