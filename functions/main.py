@@ -19,7 +19,7 @@ from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from app.agent import summify_workflow
+from app.agent import insummery_workflow
 from app.storage import FirestoreStorageProvider
 
 # Initialize Firebase Admin
@@ -126,8 +126,8 @@ def handle_process_email(req: https_fn.Request, user_id: str, headers: dict) -> 
     # Run the workflow
     session_service = InMemorySessionService()
     runner = Runner(
-        agent=summify_workflow,
-        app_name="summify_app",
+        agent=insummery_workflow,
+        app_name="insummery_app",
         session_service=session_service,
         auto_create_session=True
     )
@@ -142,7 +142,7 @@ def handle_process_email(req: https_fn.Request, user_id: str, headers: dict) -> 
     
     # Retrieve the session to check if it's interrupted
     loop = asyncio.new_event_loop()
-    session = loop.run_until_complete(session_service.get_session(user_id=user_id, session_id=session_id, app_name="summify_app"))
+    session = loop.run_until_complete(session_service.get_session(user_id=user_id, session_id=session_id, app_name="insummery_app"))
     loop.close()
     
     # Check for RequestInput
@@ -213,15 +213,15 @@ def handle_resume_workflow(req: https_fn.Request, user_id: str, headers: dict) -
     loop.run_until_complete(session_service.create_session(
         user_id=user_id,
         session_id=session_id,
-        app_name="summify_app"
+        app_name="insummery_app"
     ))
-    session = loop.run_until_complete(session_service.get_session(user_id=user_id, session_id=session_id, app_name="summify_app"))
+    session = loop.run_until_complete(session_service.get_session(user_id=user_id, session_id=session_id, app_name="insummery_app"))
     session.events = deserialized_events
     loop.close()
 
     runner = Runner(
-        agent=summify_workflow,
-        app_name="summify_app",
+        agent=insummery_workflow,
+        app_name="insummery_app",
         session_service=session_service,
         auto_create_session=False
     )
@@ -250,7 +250,7 @@ def handle_resume_workflow(req: https_fn.Request, user_id: str, headers: dict) -
     if pending_interrupt:
         # Save updated events
         loop = asyncio.new_event_loop()
-        session = loop.run_until_complete(session_service.get_session(user_id=user_id, session_id=session_id, app_name="summify_app"))
+        session = loop.run_until_complete(session_service.get_session(user_id=user_id, session_id=session_id, app_name="insummery_app"))
         loop.close()
         
         serialized_events = serialize_session_events(session)

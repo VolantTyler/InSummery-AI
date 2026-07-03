@@ -193,7 +193,7 @@ linkToggleSignup.addEventListener("click", (e) => {
     if (isSignUpMode) {
         btnLogin.textContent = "Sign Up";
         linkToggleSignup.textContent = "Sign In";
-        document.querySelector(".auth-header p").textContent = "Create your Summify account";
+        document.querySelector(".auth-header p").textContent = "Create your InSummery account";
     } else {
         btnLogin.textContent = "Sign In";
         linkToggleSignup.textContent = "Sign Up";

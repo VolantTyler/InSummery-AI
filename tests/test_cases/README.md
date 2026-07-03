@@ -1,6 +1,6 @@
-# Summify Test Cases Suite
+# InSummery Test Cases Suite
 
-This directory contains a curated set of **10 test cases** featuring different kids, camps, schedules, and email formats. These cases are designed to test the robustness of the Summify schedule parser, the PII masking/unmasking framework, the schedule matrix merging logic, and Google Calendar syncing.
+This directory contains a curated set of **10 test cases** featuring different kids, camps, schedules, and email formats. These cases are designed to test the robustness of the InSummery schedule parser, the PII masking/unmasking framework, the schedule matrix merging logic, and Google Calendar syncing.
 
 ## Test Family Profile
 
@@ -54,9 +54,9 @@ cp tests/test_cases/profile_10_kids.json config/profile.json
 ### 2. Ingest Single Test Cases via the CLI
 Run individual files through the CLI in local mode to verify extraction, data-masking, and local HTML layout rendering:
 ```bash
-python bin/summify --mode local --input "$(cat tests/test_cases/case_01_emily_soccer.txt)"
+python bin/insummery --mode local --input "$(cat tests/test_cases/case_01_emily_soccer.txt)"
 ```
-*(On Windows PowerShell, use: `python bin/summify --mode local --input (Get-Content tests/test_cases/case_01_emily_soccer.txt -Raw)`)*
+*(On Windows PowerShell, use: `python bin/insummery --mode local --input (Get-Content tests/test_cases/case_01_emily_soccer.txt -Raw)`)*
 
 Verify:
 - The output file [output/schedule.html](file:///c:/Users/tyler/Git/InSummery-AI/output/schedule.html) opens and displays the new event correctly under Emily's column.

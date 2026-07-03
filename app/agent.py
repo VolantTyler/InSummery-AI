@@ -9,9 +9,9 @@ from app.nodes import (
     matrix_analyzer_node
 )
 
-# Define the root Workflow for Summify
-summify_workflow = Workflow(
-    name="summify_workflow",
+# Define the root Workflow for InSummery
+insummery_workflow = Workflow(
+    name="insummery_workflow",
     description="Concierge agent to ingest, mask, interpret schedule emails, and run gap analysis.",
     edges=[
         ("START", pii_mask_node),

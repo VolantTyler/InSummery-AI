@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "insummery-ai"
 version = "0.1.0"
-description = "Summify: A concierge agent to ingest scheduling emails, maintain a schedule matrix, and sync with Google Calendar."
+description = "InSummery: A concierge agent to ingest scheduling emails, maintain a schedule matrix, and sync with Google Calendar."
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
@@ -38,7 +38,7 @@ dev = [
 ]
 
 [project.scripts]
-summify = "app.cli:main"
+insummery = "app.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

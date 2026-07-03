@@ -1,1 +1,1 @@
-# Summify app package
+# InSummery app package

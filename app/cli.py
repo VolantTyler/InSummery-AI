@@ -10,7 +10,7 @@ from google.adk.sessions import InMemorySessionService
 from google.adk.events import RequestInput
 from google.genai.types import Content, Part, FunctionResponse
 
-from app.agent import summify_workflow
+from app.agent import insummery_workflow
 from app.storage import LocalStorageProvider
 from app.ui_generator import generate_html_grid
 
@@ -37,8 +37,8 @@ async def run_local_workflow(text: str, is_disruption: bool) -> None:
     
     session_service = InMemorySessionService()
     runner = Runner(
-        agent=summify_workflow,
-        app_name="summify_app",
+        agent=insummery_workflow,
+        app_name="insummery_app",
         session_service=session_service,
         auto_create_session=True
     )
@@ -59,7 +59,7 @@ async def run_local_workflow(text: str, is_disruption: bool) -> None:
             print(f"\nError: Workflow execution failed: [{event.error_code}] {event.error_message}")
             return
 
-    session = await session_service.get_session(user_id=user_id, session_id=session_id, app_name="summify_app")
+    session = await session_service.get_session(user_id=user_id, session_id=session_id, app_name="insummery_app")
     
     # Check for RequestInput
     pending_interrupt = None
@@ -84,7 +84,7 @@ async def run_local_workflow(text: str, is_disruption: bool) -> None:
         print("\n=== CLARIFICATION REQUIRED (PAUSED) ===")
         print(f"Workflow ID: {session_id}")
         print(f"Question: {pending_interrupt.args.get('message')}")
-        print(f"\nTo resume, run:\nsummify --mode local --resume \"<your answer>\" --workflow-id {session_id}")
+        print(f"\nTo resume, run:\ninsummery --mode local --resume \"<your answer>\" --workflow-id {session_id}")
         return
 
     # Success! Generate and open UI
@@ -110,14 +110,14 @@ async def resume_local_workflow(workflow_id: str, response: str) -> None:
     deserialized_events = deserialize_session_events(saved_state["events"])
     
     session_service = InMemorySessionService()
-    await session_service.create_session(user_id=user_id, session_id=session_id, app_name="summify_app")
-    session = await session_service.get_session(user_id=user_id, session_id=session_id, app_name="summify_app")
+    await session_service.create_session(user_id=user_id, session_id=session_id, app_name="insummery_app")
+    session = await session_service.get_session(user_id=user_id, session_id=session_id, app_name="insummery_app")
     for event in deserialized_events:
         await session_service.append_event(session, event)
     
     runner = Runner(
-        agent=summify_workflow,
-        app_name="summify_app",
+        agent=insummery_workflow,
+        app_name="insummery_app",
         session_service=session_service,
         auto_create_session=False
     )
@@ -150,7 +150,7 @@ async def resume_local_workflow(workflow_id: str, response: str) -> None:
 
     if pending_interrupt:
         # Save updated events
-        updated_session = await session_service.get_session(user_id=user_id, session_id=session_id, app_name="summify_app")
+        updated_session = await session_service.get_session(user_id=user_id, session_id=session_id, app_name="insummery_app")
         serialized_events = get_session_events_serialized(updated_session)
         saved_state["events"] = serialized_events
         saved_state["interrupt_id"] = pending_interrupt.id
@@ -160,7 +160,7 @@ async def resume_local_workflow(workflow_id: str, response: str) -> None:
         print("\n=== CLARIFICATION REQUIRED (PAUSED) ===")
         print(f"Workflow ID: {workflow_id}")
         print(f"Question: {pending_interrupt.args.get('message')}")
-        print(f"\nTo resume, run:\nsummify --mode local --resume \"<your answer>\" --workflow-id {workflow_id}")
+        print(f"\nTo resume, run:\ninsummery --mode local --resume \"<your answer>\" --workflow-id {workflow_id}")
         return
 
     # Completed! Clean up pending workflow
@@ -189,7 +189,7 @@ def run_firebase_request(action: str, payload: dict) -> dict:
     # Retrieve Firebase Auth token or ask user (we'll look for FIREBASE_ID_TOKEN env var,
     # or fallback to mock token if in local test)
     token = os.getenv("FIREBASE_ID_TOKEN", "mock_token")
-    api_url = os.getenv("SUMMIFY_API_URL", "http://localhost:5001/insummery-ai/us-central1/api")
+    api_url = os.getenv("INSUMMERY_API_URL", "http://localhost:5001/insummery-ai/us-central1/api")
     
     headers = {
         "Authorization": f"Bearer {token}",
@@ -209,7 +209,7 @@ def run_firebase_request(action: str, payload: dict) -> dict:
         sys.exit(1)
 
 def main():
-    parser = argparse.ArgumentParser(description="Summify CLI - Ingest emails, manage schedules and detect gaps.")
+    parser = argparse.ArgumentParser(description="InSummery CLI - Ingest emails, manage schedules and detect gaps.")
     parser.add_argument("--mode", choices=["local", "firebase"], default="local", help="Execution mode (default: local)")
     parser.add_argument("--input", type=str, help="Raw email text of a registration or schedule update")
     parser.add_argument("--disruption", type=str, help="Raw text describing a schedule disruption (e.g., nanny sick)")
