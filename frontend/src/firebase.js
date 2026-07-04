@@ -11,12 +11,12 @@ import {
 
 // Firebase configuration (uses local emulator config by default, can be customized)
 const firebaseConfig = {
-    apiKey: "mock-api-key",
-    authDomain: "insummery-ai.firebaseapp.com",
-    projectId: "insummery-ai",
-    storageBucket: "insummery-ai.appspot.com",
-    messagingSenderId: "123456789",
-    appId: "1:123456789:web:abcdef"
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "mock-api-key",
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "insummery-ai.firebaseapp.com",
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "insummery-ai",
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "insummery-ai.appspot.com",
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "123456789",
+    appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:123456789:web:abcdef"
 };
 
 const app = initializeApp(firebaseConfig);
