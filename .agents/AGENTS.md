@@ -31,3 +31,16 @@ The startup update script already installs everything below; do not reinstall. T
 
 ### Harmless noise
 - Shells print an nvm warning: "npmrc ... globalconfig/prefix ... incompatible with nvm". This is because `firebase-tools` is installed under `~/.npm-global` (user prefix). It is cosmetic and safe to ignore.
+
+## Production & Google Cloud Deployment Lessons
+
+### 1. Google Cloud MCP Server Setup & GCE Timeout Bypass
+- **Problem**: When starting Google Cloud MCP servers (like `cloudrun` or `firestore`) on local Windows/macOS/Linux machines, Node's `google-auth-library` and GCE metadata helpers hang for 15 seconds while trying to resolve `http://metadata.google.internal`. This exceeds the 10-second startup deadline for MCP servers and causes a `context deadline exceeded` error.
+- **Resolution**:
+  - Add `"NO_GCE_CHECK": "true"` to the `env` block of the server configuration in `mcp_config.json`.
+  - Ensure the files `metadata.js` and `googleauth.js` in the package's `node_modules` are patched to immediately return `null`/`false` and skip GCE metadata requests if `process.env.NO_GCE_CHECK === 'true'`.
+
+### 2. Python Cloud Functions Production Dependencies
+- **Problem**: When deploying Gen 2 Cloud Functions (which run on Cloud Run), Google Cloud builds the runtime container image using only `functions/requirements.txt`. If your `main.py` imports a local package (like `app/`), any dependencies defined in `pyproject.toml` but missing from `functions/requirements.txt` will cause a `ModuleNotFoundError` during container startup health check, leading to deployment failure (`Container Healthcheck failed`).
+- **Resolution**: Always sync all runtime dependencies from `pyproject.toml` into `functions/requirements.txt` before deploying to production.
+
