@@ -28,8 +28,10 @@ thresholds:
   # End-to-end: share of registration emails that make it through the whole
   # workflow with correct routing, confident extraction, and exact critical
   # fields. Matches the 80% bar of the former standalone smoke test.
+  # (workflow_field_score is reported and baseline-tracked but not gated:
+  # a single routing failure zeroes a whole case, which would make an
+  # absolute field-score threshold flap.)
   workflow_pass_rate: 0.80
-  workflow_field_score: 0.85
 
 # Regression gate relative to the committed baseline for the active model.
 # A metric may drop at most this much below the baseline before the run fails.

@@ -1,6 +1,7 @@
 from app.evaluation.scoring import (
     exact_score,
     fuzzy_score,
+    name_score,
     score_triager_case,
     score_registration_activity,
     score_disruption,
@@ -28,6 +29,16 @@ def test_fuzzy_score_containment_and_similarity():
     assert fuzzy_score("Soccer Camp", "Chess Tournament") < 0.5
     assert fuzzy_score(None, None) == 1.0
     assert fuzzy_score("something", None) == 0.0
+
+
+def test_name_score_accepts_fuller_names():
+    assert name_score("Emily", "Emily") == 1.0
+    assert name_score("Emily", "emily smith") == 1.0
+    assert name_score("Emily Smith", "Emily") == 0.0
+    assert name_score("Emma", "Emmanuel") == 0.0
+    assert name_score("Emily", "Jack") == 0.0
+    assert name_score(None, "") == 1.0
+    assert name_score("Emily", None) == 0.0
 
 
 def test_score_triager_case():

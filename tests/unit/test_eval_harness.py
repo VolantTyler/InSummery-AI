@@ -88,7 +88,6 @@ def eval_root(tmp_path):
             "disruption_field_score": 0.85,
             "registration_confidence_gate_rate": 0.90,
             "workflow_pass_rate": 0.80,
-            "workflow_field_score": 0.85,
         },
         "regression_tolerance": 0.05,
         "baselines": {

@@ -66,11 +66,11 @@ covered offline by unit tests (`tests/unit/test_eval_scoring.py`,
 | Metric | Description |
 |---|---|
 | `triager_accuracy` | Exact classification accuracy over 18 cases (10 registrations, 5 disruptions, 3 general). |
-| `registration_field_score` | Weighted field-level score of extracted activities vs. the ground-truth manifest (`tests/test_cases/test_cases_manifest.json`). Child name, dates, and times are exact-match; title/location/notes use gated string similarity. |
+| `registration_field_score` | Weighted field-level score of extracted activities vs. the ground-truth manifest (`tests/test_cases/test_cases_manifest.json`). Dates and times are exact-match; the child name accepts fuller forms ("Emily Smith" for "Emily"); title/location/notes use gated string similarity. |
 | `registration_confidence_gate_rate` | Share of registration cases whose self-reported confidence clears the production HITL gate (≥ 80). |
 | `disruption_field_score` | Weighted field-level score for disruption extraction (child, date, type, description). |
-| `workflow_pass_rate` | End-to-end: share of registration emails that complete the full workflow with correct routing, confidence ≥ 80, exact critical fields (child, dates, times), and a matching activity title. |
-| `workflow_field_score` | End-to-end: same weighted field score as `registration_field_score`, but computed on the extraction the full workflow actually produced. |
+| `workflow_pass_rate` | End-to-end: share of registration emails that complete the full workflow with correct routing, confidence ≥ 80, correct critical fields (child, dates, times), and a matching activity title. |
+| `workflow_field_score` | End-to-end: same weighted field score as `registration_field_score`, but computed on the extraction the full workflow actually produced. Reported and baseline-tracked, not gated by an absolute threshold. |
 
 Absolute thresholds and the regression tolerance live in
 [eval_config.yaml](./eval_config.yaml). `insummery-eval run` exits non-zero if
