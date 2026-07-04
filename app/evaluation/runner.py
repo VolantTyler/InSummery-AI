@@ -1,12 +1,20 @@
-"""Evaluation runner for the triager and interpreter agents.
+"""Evaluation runner for the InSummery agents.
 
-Mirrors the production data path: inputs are PII-masked with the family
-profile before reaching the model, and extracted fields are unmasked before
-being scored against ground truth, so the mask/unmask round-trip is part of
-what gets evaluated.
+Two kinds of suites live here:
 
-The model invocation is injected (``agent_invoker``) so unit tests can run
-the full harness offline against canned responses.
+- **Per-agent suites** (triager, registration interpreter, disruption
+  interpreter) build each agent in isolation from the shared factories and
+  mirror the production data path: inputs are PII-masked with the family
+  profile before reaching the model, and extracted fields are unmasked before
+  being scored against ground truth, so the mask/unmask round-trip is part of
+  what gets evaluated.
+- **The end-to-end workflow suite** runs the full production ADK workflow
+  (PII mask → triager → interpreter → confidence gate), so the graph wiring
+  itself is exercised, not just the agents.
+
+Model/workflow invocations are injected (``agent_invoker`` /
+``workflow_invoker``) so unit tests can run the full harness offline against
+canned responses.
 """
 import json
 import re
@@ -31,10 +39,16 @@ from app.evaluation.scoring import (
     pick_best_activity,
     aggregate,
 )
+from app.evaluation.workflow import WorkflowInvoker, adk_workflow_invoker
 
 AgentInvoker = Callable[[Any, str], Awaitable[str]]
 
 CONFIDENCE_GATE = 80  # must match confidence_gate_node in app/nodes.py
+
+# Exact-match fields that must all be correct for a workflow case to pass.
+WORKFLOW_CRITICAL_FIELDS = ("child_name", "start_date", "end_date", "start_time", "end_time")
+
+SUITES = ("triager", "registration", "disruption", "workflow")
 
 
 async def adk_agent_invoker(agent: Any, text: str) -> str:
@@ -85,6 +99,7 @@ class EvalHarness:
         self,
         config_path: str = "tests/eval/eval_config.yaml",
         agent_invoker: Optional[AgentInvoker] = None,
+        workflow_invoker: Optional[WorkflowInvoker] = None,
         model_spec: Optional[str] = None,
     ):
         self.config_path = Path(config_path)
@@ -93,6 +108,7 @@ class EvalHarness:
             self.config = yaml.safe_load(f)
 
         self.agent_invoker = agent_invoker or adk_agent_invoker
+        self.workflow_invoker = workflow_invoker or adk_workflow_invoker
 
         if model_spec is None:
             from app.model_client import resolve_model_spec
@@ -216,25 +232,116 @@ class EvalHarness:
         }
 
     # ------------------------------------------------------------------
-    async def run_all(self) -> Dict[str, Any]:
-        triager = await self.eval_triager()
-        registration = await self.eval_interpreter_registration()
-        disruption = await self.eval_interpreter_disruption()
+    # End-to-end workflow (full ADK graph, registration cases)
+    # ------------------------------------------------------------------
+    async def eval_workflow_registration(
+        self, case_filter: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """Run raw registration emails through the complete production
+        workflow and score the persisted extraction against ground truth.
+
+        A case passes when the workflow completed without interruption, the
+        triager routed it to "registration", the self-reported confidence
+        cleared the production HITL gate, every critical field matched
+        exactly, and the activity title cleared the fuzzy-match gate.
+        """
+        ds_cfg = self.config["datasets"]["workflow_registration"]
+        manifest = self._load_json(ds_cfg["manifest"])
+        cases_dir = self.root / ds_cfg["cases_dir"]
+
+        if case_filter:
+            manifest = [c for c in manifest if c["id"] in set(case_filter)]
+
+        results = []
+        for expected in manifest:
+            with open(cases_dir / expected["filename"], "r", encoding="utf-8") as f:
+                email_text = f.read()
+
+            outcome = await self.workflow_invoker(email_text, self.profile)
+            row: Dict[str, Any] = {"id": expected["id"], "status": outcome["status"]}
+
+            if outcome["status"] != "COMPLETED":
+                row.update({
+                    "passed": False,
+                    "score": 0.0,
+                    "field_scores": {},
+                    "error": outcome.get("error"),
+                    "message": outcome.get("message"),
+                })
+                results.append(row)
+                continue
+
+            best = pick_best_activity(expected, outcome.get("activities") or [])
+            scored = (
+                score_registration_activity(expected, best)
+                if best is not None
+                else {"field_scores": {}, "score": 0.0}
+            )
+
+            confidence = outcome.get("confidence_score") or 0
+            correct_category = outcome.get("category") == "registration"
+            field_scores = scored["field_scores"]
+            passed = (
+                correct_category
+                and confidence >= CONFIDENCE_GATE
+                and all(field_scores.get(f) == 1.0 for f in WORKFLOW_CRITICAL_FIELDS)
+                and field_scores.get("activity_title", 0.0) > 0.0
+            )
+
+            row.update({
+                "passed": passed,
+                "score": scored["score"],
+                "field_scores": field_scores,
+                "category": outcome.get("category"),
+                "confidence_score": confidence,
+                "extracted_activities": len(outcome.get("activities") or []),
+            })
+            results.append(row)
+
+        return {
+            "pass_rate": aggregate([1.0 if r["passed"] else 0.0 for r in results]),
+            "field_score": aggregate([r["score"] for r in results]),
+            "cases": results,
+        }
+
+    # ------------------------------------------------------------------
+    async def run_all(self, suites: Optional[List[str]] = None) -> Dict[str, Any]:
+        selected = list(suites) if suites else list(SUITES)
+        unknown = [s for s in selected if s not in SUITES]
+        if unknown:
+            raise ValueError(f"Unknown eval suite(s): {unknown}. Valid suites: {list(SUITES)}")
+
+        metrics: Dict[str, float] = {}
+        details: Dict[str, Any] = {}
+
+        if "triager" in selected:
+            triager = await self.eval_triager()
+            metrics["triager_accuracy"] = triager["accuracy"]
+            details["triager"] = triager
+
+        if "registration" in selected:
+            registration = await self.eval_interpreter_registration()
+            metrics["registration_field_score"] = registration["field_score"]
+            metrics["registration_confidence_gate_rate"] = registration["confidence_gate_rate"]
+            details["interpreter_registration"] = registration
+
+        if "disruption" in selected:
+            disruption = await self.eval_interpreter_disruption()
+            metrics["disruption_field_score"] = disruption["field_score"]
+            details["interpreter_disruption"] = disruption
+
+        if "workflow" in selected:
+            workflow = await self.eval_workflow_registration()
+            metrics["workflow_pass_rate"] = workflow["pass_rate"]
+            metrics["workflow_field_score"] = workflow["field_score"]
+            details["workflow_registration"] = workflow
 
         return {
             "model": self.model_spec,
             "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            "metrics": {
-                "triager_accuracy": triager["accuracy"],
-                "registration_field_score": registration["field_score"],
-                "registration_confidence_gate_rate": registration["confidence_gate_rate"],
-                "disruption_field_score": disruption["field_score"],
-            },
-            "details": {
-                "triager": triager,
-                "interpreter_registration": registration,
-                "interpreter_disruption": disruption,
-            },
+            "suites": selected,
+            "metrics": metrics,
+            "details": details,
         }
 
     def check_thresholds(self, report: Dict[str, Any]) -> List[str]:

@@ -9,6 +9,12 @@ datasets:
     manifest: tests/test_cases/test_cases_manifest.json
     cases_dir: tests/test_cases
   interpreter_disruption: tests/eval/datasets/interpreter_disruption_cases.json
+  # End-to-end suite: the same curated registration emails, but run through
+  # the full production ADK workflow (mask -> triager -> interpreter -> gate)
+  # instead of the interpreter agent in isolation.
+  workflow_registration:
+    manifest: tests/test_cases/test_cases_manifest.json
+    cases_dir: tests/test_cases
 
 # Absolute quality gates. `insummery-eval run` fails if any metric drops
 # below its threshold, regardless of the baseline.
@@ -19,6 +25,11 @@ thresholds:
   # Registration extractions on these unambiguous cases should clear the
   # production HITL confidence gate (>= 80).
   registration_confidence_gate_rate: 0.90
+  # End-to-end: share of registration emails that make it through the whole
+  # workflow with correct routing, confident extraction, and exact critical
+  # fields. Matches the 80% bar of the former standalone smoke test.
+  workflow_pass_rate: 0.80
+  workflow_field_score: 0.85
 
 # Regression gate relative to the committed baseline for the active model.
 # A metric may drop at most this much below the baseline before the run fails.

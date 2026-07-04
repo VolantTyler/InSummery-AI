@@ -200,9 +200,9 @@ We will write unit and integration tests under the `tests/` directory:
 - `tests/unit/test_matrix_logic.py`: Test schedule merging, baseline coverage integration, and gap detection.
 - `tests/eval/eval_config.yaml` and `tests/eval/datasets/`: Set up an evaluation dataset for the Triager and Interpreter agents. Run:
   ```bash
-  agents-cli eval run
+  insummery-eval run
   ```
-  to verify classification accuracy and confidence score generation.
+  to verify classification accuracy, confidence score generation, and the end-to-end workflow pass rate.
 
 ### Manual Verification
 1. **Local CLI Disruption Demo**: Run:
