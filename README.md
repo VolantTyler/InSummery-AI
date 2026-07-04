@@ -131,3 +131,21 @@ Run the pytest suite to verify all logic (matrix merging, gap analysis, PII mask
 ```bash
 python -m pytest
 ```
+
+---
+
+## Agent Evaluation Loop
+
+The LLM-backed agents (triager and interpreter) have a dedicated evaluation
+harness with deterministic scoring, absolute quality gates, and per-model
+baseline regression tracking:
+
+```bash
+insummery-eval run        # run evals and gate on thresholds + baseline
+insummery-eval baseline   # regenerate the baseline after intentional changes
+```
+
+Executing the evals requires a `GEMINI_API_KEY` (or a running Ollama
+instance). The committed reference baseline is generated against Gemini. See
+[tests/eval/README.md](tests/eval/README.md) for metrics, thresholds, and the
+baseline policy.

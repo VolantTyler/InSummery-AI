@@ -1,0 +1,32 @@
+[
+  {
+    "id": "dis_case_01",
+    "text": "Hi Sarah, so sorry for the late notice but I woke up with a fever and won't be able to watch the kids tomorrow. I was scheduled to watch Emma on Tuesday July 7th 2026 from 9am to 5pm. Hopefully back Wednesday. - Jessica",
+    "expected": {
+      "child_name": "Emma",
+      "date": "2026-07-07",
+      "disruption_type": "SICK_LEAVE",
+      "description": "Nanny Jessica is sick and cannot watch Emma"
+    }
+  },
+  {
+    "id": "dis_case_02",
+    "text": "ALERT from Green Valley Soccer: Junior Striker Soccer Camp is CANCELLED for Wednesday, July 8, 2026 due to a facilities issue. This affects Emily's 9:00 AM - 12:00 PM session. All other sessions this week run as scheduled.",
+    "expected": {
+      "child_name": "Emily",
+      "date": "2026-07-08",
+      "disruption_type": "CANCELLATION",
+      "description": "Junior Striker Soccer Camp cancelled due to a facilities issue"
+    }
+  },
+  {
+    "id": "dis_case_03",
+    "text": "Astro Academy notice: Jack's robotics session on Thursday, July 16, 2026 will start two hours late at 11:00 AM due to staff training. Pick-up remains at 3:00 PM.",
+    "expected": {
+      "child_name": "Jack",
+      "date": "2026-07-16",
+      "disruption_type": "DELAY",
+      "description": "Robotics session starting two hours late due to staff training"
+    }
+  }
+]

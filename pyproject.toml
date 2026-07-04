@@ -28,6 +28,7 @@ dependencies = [
     "opentelemetry-util-genai[upload]>=0.3b0,<0.4b0",
     "gcsfs>=2024.3.0",
     "opentelemetry-exporter-gcp-trace>=1.6.0",
+    "pyyaml>=6.0.0",
 ]
 
 [project.optional-dependencies]
@@ -39,6 +40,7 @@ dev = [
 
 [project.scripts]
 insummery = "app.cli:main"
+insummery-eval = "app.evaluation.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

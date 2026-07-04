@@ -32,39 +32,49 @@ def get_ollama_matching_model(model_name: str, url: str = "http://localhost:1143
     except Exception:
         return None
 
+def resolve_model_spec() -> str:
+    """
+    Return the LiteLLM model identifier that get_model_client() would use,
+    without instantiating a client. Used by the evaluation harness to tag
+    results and baselines with the model that actually ran.
+    """
+    force_local = os.getenv("FORCE_LOCAL_LLM", "").lower() == "true"
+    force_cloud = os.getenv("FORCE_CLOUD_LLM", "").lower() == "true"
+
+    ollama_url = os.getenv("OLLAMA_API_BASE", "http://localhost:11434")
+    ollama_model = os.getenv("OLLAMA_MODEL", "gemma4:25b")
+    gemini_model = os.getenv("GEMINI_MODEL", "gemini/gemini-2.5-flash")
+
+    matched_model = None if force_cloud else get_ollama_matching_model(ollama_model, ollama_url)
+
+    if force_local or matched_model:
+        return f"ollama_chat/{matched_model or ollama_model}"
+    return gemini_model
+
+
 def get_model_client() -> LiteLlm:
     """
     Get the appropriate model client.
     Tries to use local Ollama with Gemma4:25b (or matching installed model like gemma4:26b) first.
     Falls back to Gemini 3.5 Flash (via LiteLLM gemini/gemini-2.5-flash) if Ollama or a matching model is unavailable.
     """
-    # Allow overriding via environment variables
-    force_local = os.getenv("FORCE_LOCAL_LLM", "").lower() == "true"
-    force_cloud = os.getenv("FORCE_CLOUD_LLM", "").lower() == "true"
-    
-    ollama_url = os.getenv("OLLAMA_API_BASE", "http://localhost:11434")
-    ollama_model = os.getenv("OLLAMA_MODEL", "gemma4:25b")
-    
-    # We use gemini-2.5-flash as the standard Gemini Flash model in LiteLLM
+    model_spec = resolve_model_spec()
     gemini_model = os.getenv("GEMINI_MODEL", "gemini/gemini-2.5-flash")
-    
-    matched_model = None if force_cloud else get_ollama_matching_model(ollama_model, ollama_url)
-    
-    if force_local or matched_model:
-        model_to_use = matched_model or ollama_model
-        logger.info(f"Using local Ollama model '{model_to_use}' at {ollama_url} with fallback to {gemini_model}")
-        # LiteLLM expects 'ollama_chat/model_name' for chat completion
+    ollama_url = os.getenv("OLLAMA_API_BASE", "http://localhost:11434")
+
+    if model_spec.startswith("ollama_chat/"):
+        logger.info(f"Using local Ollama model '{model_spec}' at {ollama_url} with fallback to {gemini_model}")
         return LiteLlm(
-            model=f"ollama_chat/{model_to_use}",
+            model=model_spec,
             api_base=ollama_url,
             fallbacks=[gemini_model]
         )
     else:
-        logger.info(f"Ollama local service or matching model not available. Using Gemini: '{gemini_model}'")
+        logger.info(f"Ollama local service or matching model not available. Using Gemini: '{model_spec}'")
         # Ensure GEMINI_API_KEY is present if running in cloud mode
         if not os.getenv("GEMINI_API_KEY") and not os.getenv("GOOGLE_API_KEY"):
             logger.warning("Neither GEMINI_API_KEY nor GOOGLE_API_KEY is set. Gemini calls may fail.")
-        
+
         return LiteLlm(
-            model=gemini_model
+            model=model_spec
         )

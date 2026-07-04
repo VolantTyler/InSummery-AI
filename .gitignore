@@ -128,3 +128,8 @@ build/
 # Java JDK
 jdk-*/
 jdk/
+
+# Eval baselines generated against local Ollama models (model-dependent;
+# only Gemini baselines are committed - see tests/eval/README.md)
+tests/eval/baselines/local/
+

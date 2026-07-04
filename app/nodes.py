@@ -4,9 +4,13 @@ from typing import Any, Dict, List
 from google.adk import Context
 from google.adk.workflow import node
 from google.adk.events import RequestInput
-from google.adk.agents.llm_agent import LlmAgent
 
-from app.model_client import get_model_client
+from app.agent_factories import (
+    build_triager_agent,
+    build_interpreter_registration_agent,
+    build_interpreter_disruption_agent,
+    build_interpreter_hitl_agent,
+)
 from app.pii_masker import PIIMasker
 from app.storage import LocalStorageProvider, FirestoreStorageProvider
 from app.schemas import InterpretationResult, DisruptionDetail
@@ -41,20 +45,7 @@ async def pii_mask_node(ctx: Context, node_input: str) -> str:
 @node(rerun_on_resume=True)
 async def triager_node(ctx: Context, node_input: str) -> str:
     """Classify the input text as registration, disruption, or general."""
-    model = get_model_client()
-    
-    agent = LlmAgent(
-        name="triager_agent",
-        model=model,
-        instruction=(
-            "You are an email triager for a family schedule concierge. "
-            "Classify the incoming email/message into one of the following categories:\n"
-            "1. 'registration': For new camp, class, school, or activity registrations.\n"
-            "2. 'disruption': For cancellations, nanny sick leave, schedule changes, or delays.\n"
-            "3. 'general': For other messages or general inquiries.\n"
-            "Respond with exactly one word: 'registration', 'disruption', or 'general'."
-        )
-    )
+    agent = build_triager_agent()
     
     res = await ctx.run_node(agent, node_input)
     category = res.strip().lower()
@@ -68,36 +59,14 @@ async def triager_node(ctx: Context, node_input: str) -> str:
 @node(rerun_on_resume=True)
 async def interpreter_registration_node(ctx: Context, node_input: str) -> Any:
     """Extract structured registration data from the masked text."""
-    model = get_model_client()
-    agent = LlmAgent(
-        name="interpreter_agent_registration",
-        model=model,
-        instruction=(
-            "Extract all camp, class, school, or activity registrations from the email. "
-            "For each activity, extract the child's name, activity title, start/end dates (YYYY-MM-DD), "
-            "daily start/end times (HH:MM), location, and notes. "
-            "Assign a confidence score (0-100) on how confident you are in this extraction, "
-            "along with a brief evaluation trace explaining the score."
-        ),
-        output_schema=InterpretationResult
-    )
+    agent = build_interpreter_registration_agent()
     res = await ctx.run_node(agent, node_input)
     return res
 
 @node(rerun_on_resume=True)
 async def interpreter_disruption_node(ctx: Context, node_input: str) -> Any:
     """Extract structured disruption data from the masked text."""
-    model = get_model_client()
-    agent = LlmAgent(
-        name="interpreter_agent_disruption",
-        model=model,
-        instruction=(
-            "Extract the disruption details from the message. "
-            "Extract the child's name, the date of the disruption (YYYY-MM-DD), start/end times (HH:MM), "
-            "description, and the disruption type (CANCELLATION, DELAY, SICK_LEAVE)."
-        ),
-        output_schema=DisruptionDetail
-    )
+    agent = build_interpreter_disruption_agent()
     res = await ctx.run_node(agent, node_input)
     return res
 
@@ -139,7 +108,6 @@ async def hitl_node(ctx: Context, node_input: Any) -> Any:
         val = ctx.resume_inputs[interrupt_id]
         # Since we are in HITL, the user's response contains the corrected schedule details.
         # We run the interpreter agent again, this time forcing high confidence or combining the inputs.
-        model = get_model_client()
         original_text = ctx.state.get("original_text", "")
         combined_prompt = f"Original email:\n{original_text}\n\nParent clarification: {val}"
         
@@ -150,16 +118,7 @@ async def hitl_node(ctx: Context, node_input: Any) -> Any:
         masker.mask_to_original = ctx.state.get("pii_mappings", {})
         masked_combined = masker.mask(combined_prompt)
         
-        agent = LlmAgent(
-            name="interpreter_agent_hitl",
-            model=model,
-            instruction=(
-                "Extract all camp, class, school, or activity registrations from the email using the parent's clarification. "
-                "For each activity, extract the child's name, activity title, start/end dates (YYYY-MM-DD), "
-                "daily start/end times (HH:MM), location, and notes."
-            ),
-            output_schema=InterpretationResult
-        )
+        agent = build_interpreter_hitl_agent()
         res = await ctx.run_node(agent, masked_combined)
         yield res
         return
