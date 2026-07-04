@@ -50,11 +50,21 @@ def _run_report(harness: EvalHarness, suites=None) -> dict:
     try:
         return asyncio.run(harness.run_all(suites=suites))
     except Exception as exc:
-        if "GEMINI_API_KEY" in str(exc) or "GOOGLE_API_KEY" in str(exc):
+        exc_str = str(exc)
+        if "GEMINI_API_KEY" in exc_str or "GOOGLE_API_KEY" in exc_str:
             print(
                 "\nEVAL ABORTED: the active model is Gemini but no API key is set.\n"
                 "Set GEMINI_API_KEY (Cloud Agents: add it as a secret in the Cursor "
                 "Dashboard) or start a local Ollama instance.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        elif "vertex_ai" in exc_str.lower() or "aiplatform" in exc_str.lower() or "billing" in exc_str.lower() or "quota" in exc_str.lower():
+            print(
+                f"\nEVAL ABORTED: Vertex AI API call failed.\n"
+                f"Error: {exc}\n"
+                f"Please ensure Google Cloud SDK is authenticated, the Vertex AI API (aiplatform.googleapis.com) "
+                f"is enabled, billing is enabled, and GOOGLE_CLOUD_PROJECT/VERTEXAI_PROJECT is set properly.",
                 file=sys.stderr,
             )
             sys.exit(2)

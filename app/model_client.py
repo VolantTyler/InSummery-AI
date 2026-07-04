@@ -4,6 +4,12 @@ import logging
 from typing import Optional
 from google.adk.models.lite_llm import LiteLlm
 
+# Map standard Google Cloud env vars to Vertex AI equivalents for LiteLLM if not already set
+if "GOOGLE_CLOUD_PROJECT" in os.environ and "VERTEXAI_PROJECT" not in os.environ:
+    os.environ["VERTEXAI_PROJECT"] = os.environ["GOOGLE_CLOUD_PROJECT"]
+if "GOOGLE_CLOUD_LOCATION" in os.environ and "VERTEXAI_LOCATION" not in os.environ:
+    os.environ["VERTEXAI_LOCATION"] = os.environ["GOOGLE_CLOUD_LOCATION"]
+
 logger = logging.getLogger(__name__)
 
 def get_ollama_matching_model(model_name: str, url: str = "http://localhost:11434", timeout: float = 1.0) -> Optional[str]:
@@ -43,7 +49,7 @@ def resolve_model_spec() -> str:
 
     ollama_url = os.getenv("OLLAMA_API_BASE", "http://localhost:11434")
     ollama_model = os.getenv("OLLAMA_MODEL", "gemma4:25b")
-    gemini_model = os.getenv("GEMINI_MODEL", "gemini/gemini-2.5-flash")
+    gemini_model = os.getenv("GEMINI_MODEL", "vertex_ai/gemini-2.5-flash")
 
     matched_model = None if force_cloud else get_ollama_matching_model(ollama_model, ollama_url)
 
@@ -59,7 +65,7 @@ def get_model_client() -> LiteLlm:
     Falls back to Gemini 3.5 Flash (via LiteLLM gemini/gemini-2.5-flash) if Ollama or a matching model is unavailable.
     """
     model_spec = resolve_model_spec()
-    gemini_model = os.getenv("GEMINI_MODEL", "gemini/gemini-2.5-flash")
+    gemini_model = os.getenv("GEMINI_MODEL", "vertex_ai/gemini-2.5-flash")
     ollama_url = os.getenv("OLLAMA_API_BASE", "http://localhost:11434")
 
     if model_spec.startswith("ollama_chat/"):
@@ -71,9 +77,13 @@ def get_model_client() -> LiteLlm:
         )
     else:
         logger.info(f"Ollama local service or matching model not available. Using Gemini: '{model_spec}'")
-        # Ensure GEMINI_API_KEY is present if running in cloud mode
-        if not os.getenv("GEMINI_API_KEY") and not os.getenv("GOOGLE_API_KEY"):
-            logger.warning("Neither GEMINI_API_KEY nor GOOGLE_API_KEY is set. Gemini calls may fail.")
+        # Ensure credentials are present based on provider type
+        if model_spec.startswith("gemini/"):
+            if not os.getenv("GEMINI_API_KEY") and not os.getenv("GOOGLE_API_KEY"):
+                logger.warning("Neither GEMINI_API_KEY nor GOOGLE_API_KEY is set. Gemini calls may fail.")
+        elif model_spec.startswith("vertex_ai/"):
+            if not os.getenv("VERTEXAI_PROJECT") and not os.getenv("GOOGLE_CLOUD_PROJECT"):
+                logger.warning("Neither VERTEXAI_PROJECT nor GOOGLE_CLOUD_PROJECT is set. Vertex AI calls may fail.")
 
         return LiteLlm(
             model=model_spec
