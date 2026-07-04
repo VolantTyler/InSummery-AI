@@ -1,6 +1,10 @@
-import pytest
 from datetime import datetime
-from app.matrix_logic import calculate_gaps, merge_activities, apply_disruption, parse_date
+
+import pytest
+
+from app.matrix_logic import (apply_disruption, calculate_gaps,
+                              merge_activities, parse_date)
+
 
 @pytest.fixture
 def sample_profile():
@@ -120,3 +124,81 @@ def test_calculate_gaps_relative(sample_profile):
     assert len(jack_rel_gaps) == 1
     assert jack_rel_gaps[0]["start_time"] == "09:00"
     assert jack_rel_gaps[0]["end_time"] == "12:00"
+
+def test_calculate_gaps_honors_frontend_default_baseline_schema():
+    profile = {
+        "children": [{"name": "Emily"}],
+        "baseline_coverage": [
+            {
+                "name": "School",
+                "days": [1, 2, 3, 4, 5],
+                "start_time": "08:30",
+                "end_time": "15:00",
+                "start_date": "2026-09-01",
+                "end_date": "2027-06-30",
+            }
+        ],
+    }
+
+    gaps = calculate_gaps(
+        [],
+        profile,
+        parse_date("2026-09-01"),  # Tuesday, first school day in default profile
+        parse_date("2026-09-01"),
+    )
+
+    emily_gaps = [g for g in gaps if g["child_name"] == "Emily" and g["type"] == "ABSOLUTE"]
+    assert len(emily_gaps) == 1
+    assert emily_gaps[0]["start_time"] == "15:00"
+    assert emily_gaps[0]["end_time"] == "17:00"
+
+
+def test_calculate_gaps_respects_frontend_baseline_date_range():
+    profile = {
+        "children": [{"name": "Emily"}],
+        "baseline_coverage": [
+            {
+                "name": "School",
+                "days": [1, 2, 3, 4, 5],
+                "start_time": "08:30",
+                "end_time": "15:00",
+                "start_date": "2026-09-01",
+                "end_date": "2027-06-30",
+            }
+        ],
+    }
+
+    gaps = calculate_gaps(
+        [],
+        profile,
+        parse_date("2026-08-31"),  # Monday before the default school year starts
+        parse_date("2026-08-31"),
+    )
+
+    emily_gaps = [g for g in gaps if g["child_name"] == "Emily" and g["type"] == "ABSOLUTE"]
+    assert len(emily_gaps) == 1
+    assert emily_gaps[0]["start_time"] == "09:00"
+    assert emily_gaps[0]["end_time"] == "17:00"
+
+
+def test_calculate_gaps_accepts_matrix_grid_days_of_week_alias():
+    profile = {
+        "children": [{"name": "Emily"}],
+        "baseline_coverage": [
+            {
+                "name": "School",
+                "days_of_week": [1, 2, 3, 4, 5],
+                "start_time": "08:30",
+                "end_time": "15:00",
+                "start_date": "2026-09-01",
+                "end_date": "2027-06-30",
+            }
+        ],
+    }
+
+    gaps = calculate_gaps([], profile, parse_date("2026-09-02"), parse_date("2026-09-02"))
+
+    emily_gaps = [g for g in gaps if g["child_name"] == "Emily" and g["type"] == "ABSOLUTE"]
+    assert len(emily_gaps) == 1
+    assert emily_gaps[0]["start_time"] == "15:00"
+    assert emily_gaps[0]["end_time"] == "17:00"
