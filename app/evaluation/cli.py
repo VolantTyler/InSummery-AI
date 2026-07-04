@@ -1,16 +1,17 @@
 """CLI for the InSummery agent evaluation loop.
 
 Usage:
-    insummery-eval run                # run evals, gate on thresholds + baseline
+    insummery-eval run                # run all suites, gate on thresholds + baseline
+    insummery-eval run --suites workflow      # end-to-end workflow suite only
     insummery-eval run --json-out report.json
-    insummery-eval baseline           # run evals and (re)write the baseline
+    insummery-eval baseline           # run all suites and (re)write the baseline
 """
 import argparse
 import asyncio
 import json
 import sys
 
-from app.evaluation.runner import EvalHarness
+from app.evaluation.runner import EvalHarness, SUITES
 from app.evaluation.baseline import (
     is_gemini_model,
     save_baseline,
@@ -28,18 +29,26 @@ def _print_report(report: dict) -> None:
         print(f"{metric:<40} {value:>8.4f}")
     print()
 
+    def _is_failing(case: dict) -> bool:
+        if "passed" in case:
+            return not case["passed"]
+        return case["score"] < 1.0
+
     for section_name, section in report["details"].items():
-        failing = [c for c in section["cases"] if c["score"] < 1.0]
+        failing = [c for c in section["cases"] if _is_failing(c)]
         if failing:
             print(f"[{section_name}] cases below a perfect score:")
             for case in failing:
-                print(f"  - {case['id']}: {case['score']:.4f}")
+                extra = ""
+                if case.get("status") and case["status"] != "COMPLETED":
+                    extra = f" ({case['status']}: {case.get('error') or case.get('message')})"
+                print(f"  - {case['id']}: {case['score']:.4f}{extra}")
             print()
 
 
-def _run_report(harness: EvalHarness) -> dict:
+def _run_report(harness: EvalHarness, suites=None) -> dict:
     try:
-        return asyncio.run(harness.run_all())
+        return asyncio.run(harness.run_all(suites=suites))
     except Exception as exc:
         if "GEMINI_API_KEY" in str(exc) or "GOOGLE_API_KEY" in str(exc):
             print(
@@ -54,8 +63,9 @@ def _run_report(harness: EvalHarness) -> dict:
 
 def cmd_run(args: argparse.Namespace) -> int:
     harness = EvalHarness(config_path=args.config)
+    suites = args.suites or None
     print(f"Running InSummery agent evals against model: {harness.model_spec}")
-    report = _run_report(harness)
+    report = _run_report(harness, suites=suites)
     _print_report(report)
 
     if args.json_out:
@@ -65,7 +75,13 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     failures = harness.check_thresholds(report)
 
-    if not args.no_baseline_check:
+    partial_run = suites is not None and set(suites) != set(SUITES)
+    if partial_run and not args.no_baseline_check:
+        print(
+            "NOTE: only a subset of suites ran; skipping the baseline regression "
+            "check (baselines cover the full suite set)."
+        )
+    elif not args.no_baseline_check:
         baseline = load_baseline(harness.config, harness.root, harness.model_spec)
         if baseline is None:
             print(
@@ -126,6 +142,16 @@ def main() -> None:
 
     run_p = sub.add_parser("run", help="Run evals and gate on thresholds + baseline")
     run_p.add_argument("--json-out", help="Write the full JSON report to this path")
+    run_p.add_argument(
+        "--suites",
+        nargs="+",
+        choices=SUITES,
+        help=(
+            "Only run the given suites (default: all). "
+            "'workflow' runs the full end-to-end ADK graph on the registration cases; "
+            "the others evaluate each agent in isolation."
+        ),
+    )
     run_p.add_argument(
         "--no-baseline-check",
         action="store_true",

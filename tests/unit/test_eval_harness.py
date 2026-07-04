@@ -80,12 +80,14 @@ def eval_root(tmp_path):
             "triager": "tests/eval/datasets/triager_cases.json",
             "interpreter_registration": {"manifest": "manifest.json", "cases_dir": "."},
             "interpreter_disruption": "tests/eval/datasets/disruption_cases.json",
+            "workflow_registration": {"manifest": "manifest.json", "cases_dir": "."},
         },
         "thresholds": {
             "triager_accuracy": 0.90,
             "registration_field_score": 0.85,
             "disruption_field_score": 0.85,
             "registration_confidence_gate_rate": 0.90,
+            "workflow_pass_rate": 0.80,
         },
         "regression_tolerance": 0.05,
         "baselines": {
@@ -137,10 +139,32 @@ async def fake_invoker(agent, text):
     raise AssertionError(f"Unexpected agent: {agent.name}")
 
 
-def make_harness(eval_root, model_spec="gemini/gemini-2.5-flash"):
+async def fake_workflow_invoker(email_text, profile):
+    """Emulate a full workflow run that routes and extracts correctly."""
+    assert "Emily is registered" in email_text, "workflow should receive the raw email"
+    assert profile["children"][0]["name"] == "Emily"
+    return {
+        "status": "COMPLETED",
+        "category": "registration",
+        "confidence_score": 93,
+        "activities": [{
+            "child_name": "Emily",
+            "activity_title": "Junior Striker Soccer Camp",
+            "start_date": "2026-07-06",
+            "end_date": "2026-07-10",
+            "start_time": "09:00",
+            "end_time": "12:00",
+            "location": "Green Valley Sports Complex",
+            "notes": None,
+        }],
+    }
+
+
+def make_harness(eval_root, model_spec="gemini/gemini-2.5-flash", workflow_invoker=None):
     return EvalHarness(
         config_path=str(eval_root / "tests" / "eval" / "eval_config.yaml"),
         agent_invoker=fake_invoker,
+        workflow_invoker=workflow_invoker or fake_workflow_invoker,
         model_spec=model_spec,
     )
 
@@ -154,7 +178,63 @@ def test_full_eval_run_with_fake_model(eval_root):
     assert report["metrics"]["registration_field_score"] == 1.0
     assert report["metrics"]["registration_confidence_gate_rate"] == 1.0
     assert report["metrics"]["disruption_field_score"] == 1.0
+    assert report["metrics"]["workflow_pass_rate"] == 1.0
+    assert report["metrics"]["workflow_field_score"] == 1.0
     assert harness.check_thresholds(report) == []
+
+
+def test_run_all_suite_selection(eval_root):
+    harness = make_harness(eval_root)
+    report = asyncio.run(harness.run_all(suites=["workflow"]))
+
+    assert report["suites"] == ["workflow"]
+    assert set(report["metrics"]) == {"workflow_pass_rate", "workflow_field_score"}
+    assert set(report["details"]) == {"workflow_registration"}
+
+    with pytest.raises(ValueError, match="Unknown eval suite"):
+        asyncio.run(harness.run_all(suites=["nope"]))
+
+
+def test_workflow_case_fails_on_wrong_routing(eval_root):
+    async def misrouting_invoker(email_text, profile):
+        outcome = await fake_workflow_invoker(email_text, profile)
+        outcome["category"] = "general"
+        return outcome
+
+    harness = make_harness(eval_root, workflow_invoker=misrouting_invoker)
+    result = asyncio.run(harness.eval_workflow_registration())
+    assert result["pass_rate"] == 0.0
+    # Field extraction itself was still perfect; only the routing failed.
+    assert result["field_score"] == 1.0
+    assert result["cases"][0]["passed"] is False
+
+
+def test_workflow_case_fails_on_low_confidence(eval_root):
+    async def low_confidence_invoker(email_text, profile):
+        outcome = await fake_workflow_invoker(email_text, profile)
+        outcome["confidence_score"] = 60
+        return outcome
+
+    harness = make_harness(eval_root, workflow_invoker=low_confidence_invoker)
+    result = asyncio.run(harness.eval_workflow_registration())
+    assert result["pass_rate"] == 0.0
+
+
+def test_workflow_case_fails_on_interruption_or_error(eval_root):
+    async def interrupted_invoker(email_text, profile):
+        return {
+            "status": "INTERRUPTED",
+            "category": "registration",
+            "message": "Please clarify the schedule details.",
+        }
+
+    harness = make_harness(eval_root, workflow_invoker=interrupted_invoker)
+    result = asyncio.run(harness.eval_workflow_registration())
+    assert result["pass_rate"] == 0.0
+    assert result["field_score"] == 0.0
+    case = result["cases"][0]
+    assert case["status"] == "INTERRUPTED"
+    assert case["passed"] is False
 
 
 def test_thresholds_fail_on_low_scores(eval_root):

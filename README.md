@@ -136,35 +136,23 @@ python -m pytest
 
 ## Agent Evaluation Loop
 
-The LLM-backed agents (triager and interpreter) have a dedicated evaluation
-harness with deterministic scoring, absolute quality gates, and per-model
-baseline regression tracking:
+The LLM-backed agents (triager and interpreter) have a single, unified
+evaluation harness with deterministic scoring, absolute quality gates, and
+per-model baseline regression tracking. It covers both the agents in
+isolation and the full end-to-end ADK workflow (PII mask → triager →
+interpreter → confidence gate):
 
 ```bash
-insummery-eval run        # run evals and gate on thresholds + baseline
-insummery-eval baseline   # regenerate the baseline after intentional changes
+insummery-eval run                    # run all suites, gate on thresholds + baseline
+insummery-eval run --suites workflow  # end-to-end workflow suite only (quick live sanity check)
+insummery-eval baseline               # regenerate the baseline after intentional changes
 ```
 
 Executing the evals requires a `GEMINI_API_KEY` (or a running Ollama
 instance). The committed reference baseline is generated against Gemini. See
-[tests/eval/README.md](tests/eval/README.md) for metrics, thresholds, and the
-baseline policy.
+[tests/eval/README.md](tests/eval/README.md) for suites, metrics, thresholds,
+and the baseline policy.
 
-There is also a standalone live smoke-test script, `tests/eval/run_eval.py`,
-which runs the real Triager + Interpreter agents through the full ADK
-workflow (not just the agents in isolation) against the same curated emails
-and reports pass/fail per case. It's a quick way to sanity-check that
-`GEMINI_API_KEY` is working end to end and that the workflow's graph wiring
-delivers the right input to each node:
-
-```bash
-# Requires GEMINI_API_KEY (or GOOGLE_API_KEY) to be set
-python -m tests.eval.run_eval
-
-# Run a subset of cases and write a JSON report
-python -m tests.eval.run_eval --cases case_01 case_05 --json-report output/eval_report.json
-```
-
-The same check also runs automatically as part of `python -m pytest`
-(`tests/eval/test_extraction_eval.py`), and is skipped automatically when no
-Gemini credential is configured.
+The end-to-end workflow suite also runs automatically as part of
+`python -m pytest` (`tests/eval/test_extraction_eval.py`), and is skipped
+automatically when no Gemini credential is configured.

@@ -53,6 +53,25 @@ def fuzzy_score(expected: Optional[str], predicted: Optional[str]) -> float:
     return SequenceMatcher(None, exp, pred).ratio()
 
 
+def name_score(expected: Optional[str], predicted: Optional[str]) -> float:
+    """Score a person-name field: 1.0 on exact match, or when every expected
+    name token appears as a whole word in the prediction, else 0.0.
+
+    Profiles store first names ("Emily") while emails often carry full names
+    ("Emily Smith"); extracting the fuller form is correct behavior, not an
+    error. Word-level containment (rather than substring) avoids false
+    positives between similar sibling names (e.g. "Emma" vs "Emmanuel").
+    """
+    exp, pred = _normalize(expected), _normalize(predicted)
+    if exp == pred:
+        return 1.0
+    if not exp or not pred:
+        return 0.0
+    expected_tokens = set(exp.split())
+    predicted_tokens = set(pred.split())
+    return 1.0 if expected_tokens <= predicted_tokens else 0.0
+
+
 def score_triager_case(expected_category: str, predicted_category: str) -> float:
     return exact_score(expected_category, predicted_category)
 
@@ -60,13 +79,16 @@ def score_triager_case(expected_category: str, predicted_category: str) -> float
 def score_registration_activity(expected: Dict[str, Any], predicted: Dict[str, Any]) -> Dict[str, Any]:
     """Score one extracted activity against manifest ground truth.
 
-    Exact-match fields: child name, dates, times.
+    Exact-match fields: dates, times.
+    Name field: child name (exact or whole-word containment, see name_score).
     Fuzzy fields: activity title, location, notes (gated by FUZZY_MATCH_THRESHOLD
     so a near-miss is scored by its similarity ratio and a clear miss scores 0).
     """
-    field_scores: Dict[str, float] = {}
+    field_scores: Dict[str, float] = {
+        "child_name": name_score(expected.get("child_name"), predicted.get("child_name")),
+    }
 
-    for field in ("child_name", "start_date", "end_date", "start_time", "end_time"):
+    for field in ("start_date", "end_date", "start_time", "end_time"):
         field_scores[field] = exact_score(expected.get(field), predicted.get(field))
 
     for field in ("activity_title", "location", "notes"):
@@ -79,7 +101,7 @@ def score_registration_activity(expected: Dict[str, Any], predicted: Dict[str, A
 
 def score_disruption(expected: Dict[str, Any], predicted: Dict[str, Any]) -> Dict[str, Any]:
     field_scores: Dict[str, float] = {
-        "child_name": exact_score(expected.get("child_name"), predicted.get("child_name")),
+        "child_name": name_score(expected.get("child_name"), predicted.get("child_name")),
         "date": exact_score(expected.get("date"), predicted.get("date")),
         "disruption_type": exact_score(expected.get("disruption_type"), predicted.get("disruption_type")),
     }
