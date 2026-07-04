@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 
 
 def is_gemini_model(model_spec: str) -> bool:
-    return model_spec.startswith("gemini/")
+    return model_spec.startswith("gemini/") or model_spec.startswith("vertex_ai/")
 
 
 def sanitize_model_spec(model_spec: str) -> str:

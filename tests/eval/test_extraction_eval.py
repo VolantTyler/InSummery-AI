@@ -15,10 +15,19 @@ import os
 import pytest
 
 from app.evaluation.runner import EvalHarness
+from app.model_client import resolve_model_spec
+
+def _has_gemini_credentials() -> bool:
+    model_spec = resolve_model_spec()
+    if model_spec.startswith("gemini/"):
+        return bool(os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"))
+    elif model_spec.startswith("vertex_ai/"):
+        return bool(os.getenv("VERTEXAI_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT"))
+    return False
 
 pytestmark = pytest.mark.skipif(
-    not (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")),
-    reason="Requires GEMINI_API_KEY (or GOOGLE_API_KEY) to exercise the live Gemini extraction pipeline.",
+    not _has_gemini_credentials(),
+    reason="Requires GEMINI_API_KEY (or GOOGLE_API_KEY) or Google Cloud Vertex AI configuration to exercise the live Gemini extraction pipeline.",
 )
 
 MIN_PASS_RATE = 0.8
