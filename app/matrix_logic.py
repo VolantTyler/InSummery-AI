@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timedelta
-from typing import Dict, Any, List
+from typing import Any, Dict, List
+
 
 def parse_date(date_str: str) -> datetime.date:
     return datetime.strptime(date_str, "%Y-%m-%d").date()
@@ -20,16 +21,63 @@ def get_day_of_week(date_obj: datetime.date) -> str:
 def get_month_name(date_obj: datetime.date) -> str:
     return date_obj.strftime("%B")
 
-def is_date_in_baseline(date_obj: datetime.date, baseline: Dict[str, Any]) -> bool:
-    # Check month
-    month = get_month_name(date_obj)
-    if month not in baseline.get("months", []):
-        return False
-    # Check day of week
-    day = get_day_of_week(date_obj)
-    if day not in baseline.get("days", []):
-        return False
+def _baseline_days(baseline: Dict[str, Any]) -> List[Any]:
+    """Return the configured baseline weekdays from supported schema variants.
+
+    The frontend stores numeric JS weekdays in ``days`` (0=Sunday, 1=Monday),
+    older MatrixGrid code looked for ``days_of_week``, and the original backend
+    expected day names in ``days``. Accept all three so existing profiles and
+    newly onboarded profiles evaluate consistently.
+    """
+    return baseline.get("days") or baseline.get("days_of_week") or []
+
+
+def _baseline_matches_day(date_obj: datetime.date, baseline: Dict[str, Any]) -> bool:
+    days = _baseline_days(baseline)
+    if not days:
+        return True
+
+    day_name = get_day_of_week(date_obj)
+    js_day_number = (date_obj.weekday() + 1) % 7
+
+    for configured_day in days:
+        if isinstance(configured_day, str):
+            if configured_day.lower() == day_name.lower():
+                return True
+            if configured_day.isdigit() and int(configured_day) == js_day_number:
+                return True
+        elif configured_day == js_day_number:
+            return True
+
+    return False
+
+
+def _baseline_matches_date_range(date_obj: datetime.date, baseline: Dict[str, Any]) -> bool:
+    """Return whether ``date_obj`` falls in a baseline's active date span.
+
+    Prefer the frontend's explicit ``start_date``/``end_date`` schema. Fall back
+    to the backend's legacy ``months`` list when no explicit date range exists.
+    """
+    start_date = baseline.get("start_date")
+    end_date = baseline.get("end_date")
+
+    if start_date or end_date:
+        if start_date and date_obj < parse_date(start_date):
+            return False
+        if end_date and date_obj > parse_date(end_date):
+            return False
+        return True
+
+    months = baseline.get("months")
+    if months:
+        month = get_month_name(date_obj)
+        return any(isinstance(m, str) and m.lower() == month.lower() for m in months)
+
     return True
+
+
+def is_date_in_baseline(date_obj: datetime.date, baseline: Dict[str, Any]) -> bool:
+    return _baseline_matches_date_range(date_obj, baseline) and _baseline_matches_day(date_obj, baseline)
 
 def calculate_gaps(activities: List[Dict[str, Any]], profile: Dict[str, Any], start_date: datetime.date, end_date: datetime.date) -> List[Dict[str, Any]]:
     """

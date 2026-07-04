@@ -1,13 +1,31 @@
 // Renders the day-by-day schedule matrix: children on one axis, weekdays as cards.
 
 function isDateInBaseline(date, baseline) {
-    const start = new Date(baseline.start_date + "T00:00:00");
-    const end = new Date(baseline.end_date + "T00:00:00");
+    if (baseline.start_date) {
+        const start = new Date(baseline.start_date + "T00:00:00");
+        if (date < start) return false;
+    }
 
-    if (date < start || date > end) return false;
+    if (baseline.end_date) {
+        const end = new Date(baseline.end_date + "T00:00:00");
+        if (date > end) return false;
+    }
 
-    const daysOfWeek = baseline.days_of_week || [1, 2, 3, 4, 5];
-    return daysOfWeek.includes(date.getDay());
+    const monthName = date.toLocaleDateString("en-US", { month: "long" });
+    if (!baseline.start_date && !baseline.end_date && baseline.months?.length && !baseline.months.includes(monthName)) {
+        return false;
+    }
+
+    const configuredDays = baseline.days || baseline.days_of_week || [1, 2, 3, 4, 5];
+    const dayName = date.toLocaleDateString("en-US", { weekday: "long" });
+    const jsDay = date.getDay();
+
+    return configuredDays.some(day => {
+        if (typeof day === "string") {
+            return day.toLowerCase() === dayName.toLowerCase() || Number(day) === jsDay;
+        }
+        return day === jsDay;
+    });
 }
 
 function buildTimelineItems(child, dateStr, dateObj, activities, gaps, baselines) {
