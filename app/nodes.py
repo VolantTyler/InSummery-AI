@@ -36,9 +36,17 @@ async def pii_mask_node(ctx: Context, node_input: str) -> str:
     masker = PIIMasker(profile)
     masked_text = masker.mask(node_input)
     
-    # Save masker mappings to session state for unmasking later
+    # Save masker mappings to session state for unmasking later.
+    # We also persist the masked text itself: downstream nodes further along
+    # the graph (e.g. interpreter_*_node) receive their *upstream* node's
+    # return value as node_input (the workflow passes data edge-to-edge), so
+    # after triager_node runs, the interpreter nodes' node_input is the
+    # triager's classification string, not this masked text. Reading it back
+    # from state keeps the actual email content available to every node that
+    # needs it, regardless of its position in the graph.
     ctx.state["pii_mappings"] = masker.mask_to_original
     ctx.state["original_text"] = node_input
+    ctx.state["masked_text"] = masked_text
     
     return masked_text
 
@@ -60,14 +68,22 @@ async def triager_node(ctx: Context, node_input: str) -> str:
 async def interpreter_registration_node(ctx: Context, node_input: str) -> Any:
     """Extract structured registration data from the masked text."""
     agent = build_interpreter_registration_agent()
-    res = await ctx.run_node(agent, node_input)
+    # node_input here is triager_node's classification string ("registration"),
+    # not the masked email text -- the workflow graph feeds each node its
+    # upstream node's return value as node_input. Pull the actual masked
+    # text back from state so extraction always sees the real content.
+    masked_text = ctx.state.get("masked_text") or node_input
+    res = await ctx.run_node(agent, masked_text)
     return res
 
 @node(rerun_on_resume=True)
 async def interpreter_disruption_node(ctx: Context, node_input: str) -> Any:
     """Extract structured disruption data from the masked text."""
     agent = build_interpreter_disruption_agent()
-    res = await ctx.run_node(agent, node_input)
+    # Same reasoning as interpreter_registration_node above: use the masked
+    # text from state rather than the upstream triager node's return value.
+    masked_text = ctx.state.get("masked_text") or node_input
+    res = await ctx.run_node(agent, masked_text)
     return res
 
 async def confidence_gate_node(ctx: Context, node_input: Any) -> str:
