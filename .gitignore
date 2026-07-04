@@ -133,3 +133,5 @@ jdk/
 # only Gemini baselines are committed - see tests/eval/README.md)
 tests/eval/baselines/local/
 
+# Generated Firebase Cloud Functions dependencies
+functions/app/

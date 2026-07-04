@@ -7,6 +7,9 @@
       "source": "functions",
       "codebase": "default",
       "runtime": "python312",
+      "predeploy": [
+        "python bin/predeploy.py"
+      ],
       "ignore": [
         "venv",
         ".git",
