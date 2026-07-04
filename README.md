@@ -131,3 +131,19 @@ Run the pytest suite to verify all logic (matrix merging, gap analysis, PII mask
 ```bash
 python -m pytest
 ```
+
+---
+
+## Evaluating the Gemini Extraction Pipeline
+
+`tests/eval/run_eval.py` exercises the real Triager + Interpreter agents (backed by `GEMINI_API_KEY`) against the 10 curated emails in [tests/test_cases/](tests/test_cases/) and scores the extracted structured output against the ground-truth manifest. This is a live check that your Gemini credentials are working end to end and that extraction accuracy meets the bar.
+
+```bash
+# Requires GEMINI_API_KEY (or GOOGLE_API_KEY) to be set
+python -m tests.eval.run_eval
+
+# Run a subset of cases and write a JSON report
+python -m tests.eval.run_eval --cases case_01 case_05 --json-report output/eval_report.json
+```
+
+The same evaluation also runs automatically as part of `python -m pytest` (`tests/eval/test_extraction_eval.py`), and is skipped automatically when no Gemini credential is configured.
