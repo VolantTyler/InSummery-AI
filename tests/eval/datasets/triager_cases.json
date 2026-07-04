@@ -1,0 +1,52 @@
+[
+  {"id": "triage_reg_01", "file": "tests/test_cases/case_01_emily_soccer.txt", "expected_category": "registration"},
+  {"id": "triage_reg_02", "file": "tests/test_cases/case_02_jack_robotics.txt", "expected_category": "registration"},
+  {"id": "triage_reg_03", "file": "tests/test_cases/case_03_sophia_art.txt", "expected_category": "registration"},
+  {"id": "triage_reg_04", "file": "tests/test_cases/case_04_liam_wilderness.txt", "expected_category": "registration"},
+  {"id": "triage_reg_05", "file": "tests/test_cases/case_05_olivia_theater.txt", "expected_category": "registration"},
+  {"id": "triage_reg_06", "file": "tests/test_cases/case_06_noah_coding.txt", "expected_category": "registration"},
+  {"id": "triage_reg_07", "file": "tests/test_cases/case_07_emma_preschool.txt", "expected_category": "registration"},
+  {"id": "triage_reg_08", "file": "tests/test_cases/case_08_lucas_tennis.txt", "expected_category": "registration"},
+  {"id": "triage_reg_09", "file": "tests/test_cases/case_09_ava_leadership.txt", "expected_category": "registration"},
+  {"id": "triage_reg_10", "file": "tests/test_cases/case_10_ethan_basketball.txt", "expected_category": "registration"},
+  {
+    "id": "triage_dis_01",
+    "text": "Hi Sarah, so sorry for the late notice but I woke up with a fever and won't be able to watch the kids tomorrow, Tuesday July 7th. Hopefully I'll be back on my feet by Wednesday. - Jessica",
+    "expected_category": "disruption"
+  },
+  {
+    "id": "triage_dis_02",
+    "text": "ALERT: Due to a facilities issue, Junior Striker Soccer Camp is CANCELLED for Wednesday, July 8, 2026. All other sessions this week will run as scheduled. We apologize for the inconvenience. - Green Valley Soccer Team",
+    "expected_category": "disruption"
+  },
+  {
+    "id": "triage_dis_03",
+    "text": "Subject: Schedule Change - Astro Academy\n\nDear Parents,\n\nPlease note that Thursday's session (July 16) will start two hours late at 11:00 AM due to a staff training event. Pick-up time remains 3:00 PM.\n\nAstro Academy Administration",
+    "expected_category": "disruption"
+  },
+  {
+    "id": "triage_dis_04",
+    "text": "Heads up - David texted that his car broke down and he can't do the Thursday afternoon sitting shift this week (July 23rd). He says he can make it up next week.",
+    "expected_category": "disruption"
+  },
+  {
+    "id": "triage_dis_05",
+    "text": "Subject: URGENT: Little Explorers closed Friday\n\nDue to a water main break, Sunshine Preschool will be CLOSED on Friday, July 17, 2026. All Little Explorers sessions for that day are cancelled and will be refunded.",
+    "expected_category": "disruption"
+  },
+  {
+    "id": "triage_gen_01",
+    "text": "Subject: Green Valley Soccer Academy - Summer Newsletter\n\nHello soccer families! Check out photos from last week's sessions on our website, and don't forget our end-of-summer BBQ fundraiser. No action needed - just keeping you in the loop!",
+    "expected_category": "general"
+  },
+  {
+    "id": "triage_gen_02",
+    "text": "Hi Sarah, it was lovely to see you at the park on Saturday! We should get the kids together for a playdate sometime soon. Let me know what your summer looks like. - Amanda",
+    "expected_category": "general"
+  },
+  {
+    "id": "triage_gen_03",
+    "text": "Subject: Your invoice from Springville Utilities\n\nDear customer, your monthly statement of $84.20 is now available. Payment is due by August 1. Thank you for being a valued customer.",
+    "expected_category": "general"
+  }
+]

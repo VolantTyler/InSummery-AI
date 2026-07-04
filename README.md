@@ -134,9 +134,28 @@ python -m pytest
 
 ---
 
-## Evaluating the Gemini Extraction Pipeline
+## Agent Evaluation Loop
 
-`tests/eval/run_eval.py` exercises the real Triager + Interpreter agents (backed by `GEMINI_API_KEY`) against the 10 curated emails in [tests/test_cases/](tests/test_cases/) and scores the extracted structured output against the ground-truth manifest. This is a live check that your Gemini credentials are working end to end and that extraction accuracy meets the bar.
+The LLM-backed agents (triager and interpreter) have a dedicated evaluation
+harness with deterministic scoring, absolute quality gates, and per-model
+baseline regression tracking:
+
+```bash
+insummery-eval run        # run evals and gate on thresholds + baseline
+insummery-eval baseline   # regenerate the baseline after intentional changes
+```
+
+Executing the evals requires a `GEMINI_API_KEY` (or a running Ollama
+instance). The committed reference baseline is generated against Gemini. See
+[tests/eval/README.md](tests/eval/README.md) for metrics, thresholds, and the
+baseline policy.
+
+There is also a standalone live smoke-test script, `tests/eval/run_eval.py`,
+which runs the real Triager + Interpreter agents through the full ADK
+workflow (not just the agents in isolation) against the same curated emails
+and reports pass/fail per case. It's a quick way to sanity-check that
+`GEMINI_API_KEY` is working end to end and that the workflow's graph wiring
+delivers the right input to each node:
 
 ```bash
 # Requires GEMINI_API_KEY (or GOOGLE_API_KEY) to be set
@@ -146,4 +165,6 @@ python -m tests.eval.run_eval
 python -m tests.eval.run_eval --cases case_01 case_05 --json-report output/eval_report.json
 ```
 
-The same evaluation also runs automatically as part of `python -m pytest` (`tests/eval/test_extraction_eval.py`), and is skipped automatically when no Gemini credential is configured.
+The same check also runs automatically as part of `python -m pytest`
+(`tests/eval/test_extraction_eval.py`), and is skipped automatically when no
+Gemini credential is configured.
