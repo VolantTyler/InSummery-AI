@@ -1,0 +1,12 @@
+{
+  "model": "gemini/gemini-2.5-flash",
+  "timestamp": "2026-07-05T20:51:03+00:00",
+  "metrics": {
+    "triager_accuracy": 0.9444,
+    "registration_field_score": 0.9515,
+    "registration_confidence_gate_rate": 1.0,
+    "disruption_field_score": 0.95,
+    "workflow_pass_rate": 1.0,
+    "workflow_field_score": 0.9517
+  }
+}
