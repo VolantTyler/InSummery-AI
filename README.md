@@ -124,6 +124,28 @@ In web mode, the application runs a local Firebase emulator suite (Auth, Firesto
 
 ---
 
+## Firebase Authentication Setup (Production)
+
+The deployed app signs in against the real Firebase project (configured via
+`frontend/.env.production`). If sign-in fails with
+`Firebase: Error (auth/configuration-not-found)`, Firebase Authentication has
+not been initialized for the project yet. To fix it:
+
+1. Open the [Firebase console](https://console.firebase.google.com/), select
+   the project (`in-summery`), and go to **Build > Authentication**.
+2. Click **Get started** to initialize Authentication for the project.
+3. On the **Sign-in method** tab, enable the **Email/Password** provider and
+   the **Google** provider (for Google, set the public-facing app name and a
+   support email).
+4. On the **Settings > Authorized domains** tab, confirm the domains the app
+   is served from are listed (the project's `*.firebaseapp.com` and
+   `*.web.app` domains are added automatically; add any custom domain).
+
+No code or config changes are needed after this — the error is entirely a
+project-console setting.
+
+---
+
 ## Running Unit Tests
 
 Run the pytest suite to verify all logic (matrix merging, gap analysis, PII masking):
