@@ -93,9 +93,18 @@ async def run_local_workflow(text: str, is_disruption: bool) -> None:
     output_path = os.path.abspath(os.path.join(".", "output", "schedule.html"))
     
     generate_html_grid(matrix, profile, output_path)
-    print(f"\nSchedule updated successfully!")
+    _print_run_outcome(matrix)
     print(f"HTML Dashboard generated at: file:///{output_path.replace(os.sep, '/')}")
     webbrowser.open(f"file:///{output_path}")
+
+def _print_run_outcome(matrix: dict) -> None:
+    warnings = matrix.get("warnings") or []
+    if warnings:
+        print("\nSchedule processed with warnings:")
+        for warning in warnings:
+            print(f"  Warning: {warning}")
+    else:
+        print("\nSchedule updated successfully!")
 
 async def resume_local_workflow(workflow_id: str, response: str) -> None:
     storage = LocalStorageProvider()
@@ -179,7 +188,7 @@ async def resume_local_workflow(workflow_id: str, response: str) -> None:
     output_path = os.path.abspath(os.path.join(".", "output", "schedule.html"))
     
     generate_html_grid(matrix, profile, output_path)
-    print(f"\nSchedule updated successfully!")
+    _print_run_outcome(matrix)
     print(f"HTML Dashboard generated at: file:///{output_path.replace(os.sep, '/')}")
     webbrowser.open(f"file:///{output_path}")
 

@@ -76,10 +76,49 @@ async def interpreter_registration_node(ctx: Context, node_input: str) -> Any:
     res = await ctx.run_node(agent, masked_text)
     return res
 
+def _build_masked_schedule_context(ctx: Context) -> str:
+    """Summarize the family's children and active schedule for the disruption
+    interpreter, using PII placeholders instead of real names.
+
+    Without this context the model cannot tell which child or year a message
+    like "camp is cancelled on August 5th" refers to, so extractions ended up
+    with unmatchable child names and past-year dates. Activity titles and
+    dates are not PII (plan section 2), so they are passed through as-is.
+    """
+    storage = _get_storage_provider(ctx)
+    user_id = ctx.user_id or "default_user"
+    profile = storage.get_profile(user_id) or {}
+
+    masker = PIIMasker(profile)
+    lines = []
+
+    child_placeholders = [
+        masker.original_to_mask[c["name"]]
+        for c in profile.get("children", [])
+        if c.get("name") in masker.original_to_mask
+    ]
+    if child_placeholders:
+        lines.append(f"Children: {', '.join(child_placeholders)}")
+
+    matrix = storage.get_matrix(user_id) or {}
+    for act in matrix.get("activities", []):
+        if act.get("status") != "ACTIVE":
+            continue
+        child = masker.original_to_mask.get(act.get("child_name"), act.get("child_name"))
+        lines.append(
+            f"- {child}: \"{act.get('activity_title')}\" "
+            f"{act.get('start_date')} to {act.get('end_date')}, "
+            f"daily {act.get('start_time')}-{act.get('end_time')}"
+        )
+    return "\n".join(lines)
+
+
 @node(rerun_on_resume=True)
 async def interpreter_disruption_node(ctx: Context, node_input: str) -> Any:
     """Extract structured disruption data from the masked text."""
-    agent = build_interpreter_disruption_agent()
+    agent = build_interpreter_disruption_agent(
+        schedule_context=_build_masked_schedule_context(ctx)
+    )
     # Same reasoning as interpreter_registration_node above: use the masked
     # text from state rather than the upstream triager node's return value.
     masked_text = ctx.state.get("masked_text") or node_input
@@ -136,6 +175,10 @@ async def hitl_node(ctx: Context, node_input: Any) -> Any:
         
         agent = build_interpreter_hitl_agent()
         res = await ctx.run_node(agent, masked_combined)
+        # Overwrite the low-confidence extraction saved by confidence_gate_node,
+        # otherwise matrix_analyzer_node would reuse the stale pre-clarification
+        # result from state and discard the clarified one.
+        ctx.state["extraction_result"] = res
         yield res
         return
         
@@ -184,15 +227,35 @@ async def matrix_analyzer_node(ctx: Context, node_input: Any) -> Dict[str, Any]:
             raw_activities.append(act_dict)
             
         updated_matrix = merge_activities(current_matrix, raw_activities)
+        warnings = []
     elif category == "disruption":
         dis_dict = extraction_result.model_dump() if hasattr(extraction_result, "model_dump") else dict(extraction_result)
         dis_dict["child_name"] = masker.unmask(dis_dict["child_name"])
         dis_dict["description"] = masker.unmask(dis_dict["description"])
+        if dis_dict.get("activity_title"):
+            dis_dict["activity_title"] = masker.unmask(dis_dict["activity_title"])
         
+        previously_disrupted = {
+            a.get("id") for a in current_matrix.get("activities", [])
+            if a.get("status") == "DISRUPTED"
+        }
         updated_matrix = apply_disruption(current_matrix, dis_dict)
+        newly_disrupted = [
+            a for a in updated_matrix.get("activities", [])
+            if a.get("status") == "DISRUPTED" and a.get("id") not in previously_disrupted
+        ]
+        warnings = []
+        if not newly_disrupted:
+            warnings.append(
+                "Disruption received but no matching scheduled activity was found "
+                f"(child: {dis_dict.get('child_name') or 'unspecified'}, "
+                f"activity: {dis_dict.get('activity_title') or 'unspecified'}, "
+                f"date: {dis_dict.get('date')}). The schedule was not changed."
+            )
     else:
         # General inquiry, no matrix changes
         updated_matrix = current_matrix
+        warnings = []
 
     # 3. Perform Gap Analysis
     # Determine the date range for gap analysis: from today to 4 weeks out,
@@ -217,6 +280,9 @@ async def matrix_analyzer_node(ctx: Context, node_input: Any) -> Dict[str, Any]:
         
     gaps = calculate_gaps(all_activities, profile, start_date, end_date)
     updated_matrix["gaps"] = gaps
+    # Warnings from this run only (e.g. a disruption that matched nothing);
+    # stale warnings from previous runs are replaced.
+    updated_matrix["warnings"] = warnings
     
     # Save the updated matrix
     storage.save_matrix(user_id, updated_matrix)

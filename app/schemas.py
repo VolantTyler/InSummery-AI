@@ -17,7 +17,17 @@ class InterpretationResult(BaseModel):
     evaluation_trace: str = Field(..., description="Brief reasoning trace of why this confidence score was given")
 
 class DisruptionDetail(BaseModel):
-    child_name: str = Field(..., description="Name of the affected child")
+    child_name: str = Field(
+        ...,
+        description=(
+            "Name of the affected child. Use an empty string if the message "
+            "does not identify a specific child; never invent a name or use 'N/A'."
+        ),
+    )
+    activity_title: Optional[str] = Field(
+        None,
+        description="Name of the affected activity, camp, or class if the message mentions one",
+    )
     date: str = Field(..., description="Date of the disruption in YYYY-MM-DD format")
     start_time: Optional[str] = Field(None, description="Start time of the disruption if applicable (HH:MM)")
     end_time: Optional[str] = Field(None, description="End time of the disruption if applicable (HH:MM)")

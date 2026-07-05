@@ -69,6 +69,89 @@ def test_apply_disruption():
     assert updated["activities"][0]["status"] == "DISRUPTED"
     assert "[DISRUPTED:" in updated["activities"][0]["notes"]
 
+
+def _camp_matrix():
+    return {
+        "activities": [
+            {
+                "id": "act_1",
+                "child_name": "Emily",
+                "activity_title": "Wilderness Explorers Camp",
+                "start_date": "2026-08-03",
+                "end_date": "2026-08-07",
+                "start_time": "09:00",
+                "end_time": "15:30",
+                "status": "ACTIVE",
+            }
+        ]
+    }
+
+
+def test_apply_disruption_matches_by_activity_title_without_child():
+    # e.g. "Wilderness Explorers Camp is cancelled on August 5th" names no child.
+    disruption = {
+        "child_name": "",
+        "activity_title": "Wilderness Explorers Camp",
+        "date": "2026-08-05",
+        "description": "Camp cancelled due to weather",
+        "disruption_type": "CANCELLATION",
+    }
+
+    updated = apply_disruption(_camp_matrix(), disruption)
+    assert updated["activities"][0]["status"] == "DISRUPTED"
+
+
+def test_apply_disruption_title_match_is_case_insensitive_substring():
+    disruption = {
+        "child_name": "",
+        "activity_title": "wilderness explorers",
+        "date": "2026-08-05",
+        "description": "Camp cancelled",
+        "disruption_type": "CANCELLATION",
+    }
+
+    updated = apply_disruption(_camp_matrix(), disruption)
+    assert updated["activities"][0]["status"] == "DISRUPTED"
+
+
+def test_apply_disruption_treats_na_child_as_unspecified():
+    disruption = {
+        "child_name": "N/A",
+        "activity_title": "Wilderness Explorers Camp",
+        "date": "2026-08-05",
+        "description": "Camp cancelled",
+        "disruption_type": "CANCELLATION",
+    }
+
+    updated = apply_disruption(_camp_matrix(), disruption)
+    assert updated["activities"][0]["status"] == "DISRUPTED"
+
+
+def test_apply_disruption_without_child_or_title_changes_nothing():
+    disruption = {
+        "child_name": "",
+        "activity_title": "",
+        "date": "2026-08-05",
+        "description": "Something happened",
+        "disruption_type": "CANCELLATION",
+    }
+
+    updated = apply_disruption(_camp_matrix(), disruption)
+    assert updated["activities"][0]["status"] == "ACTIVE"
+
+
+def test_apply_disruption_wrong_title_changes_nothing():
+    disruption = {
+        "child_name": "",
+        "activity_title": "Robotics Lab",
+        "date": "2026-08-05",
+        "description": "Robotics cancelled",
+        "disruption_type": "CANCELLATION",
+    }
+
+    updated = apply_disruption(_camp_matrix(), disruption)
+    assert updated["activities"][0]["status"] == "ACTIVE"
+
 def test_calculate_gaps_absolute(sample_profile):
     # Test absolute gaps (Mon-Fri 9:00 to 17:00 / 540 to 1020)
     # Emily has school from 8:30 to 15:00. Care window is 9:00 to 17:00.
