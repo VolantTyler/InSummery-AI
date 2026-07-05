@@ -146,9 +146,15 @@ async def confidence_gate_node(ctx: Context, node_input: Any) -> str:
         ctx.route = "CONFIDENCE_HIGH"
         return "CONFIDENCE_HIGH"
     else:
+        if isinstance(node_input, InterpretationResult):
+            trace = node_input.evaluation_trace
+        elif isinstance(node_input, dict):
+            trace = node_input.get("evaluation_trace")
+        else:
+            trace = None
         ctx.state["hitl_question"] = (
             f"The extraction confidence was low ({score}%). "
-            f"Reason: {getattr(node_input, 'evaluation_trace', 'Low extraction confidence')}. "
+            f"Reason: {trace or 'Low extraction confidence'}. "
             f"Please clarify the schedule details."
         )
         ctx.route = "CONFIDENCE_LOW"
