@@ -7,6 +7,23 @@ from opentelemetry.instrumentation.google_genai import GoogleGenAiSdkInstrumento
 
 logger = logging.getLogger(__name__)
 
+
+def _console_export_enabled() -> bool:
+    """Opt-in console span export for local debugging.
+
+    Local CLI runs instrument the GenAI SDK but stay quiet by default so demo
+    output is not drowned in JSON spans. Set INSUMMERY_OTEL_CONSOLE=true to
+    print spans to stderr.
+    """
+    return os.getenv("INSUMMERY_OTEL_CONSOLE", "").lower() in ("1", "true", "yes")
+
+
+def _maybe_add_console_exporter(provider: TracerProvider) -> None:
+    if _console_export_enabled():
+        provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
+        logger.info("OpenTelemetry console span exporter enabled (INSUMMERY_OTEL_CONSOLE).")
+
+
 def setup_telemetry():
     """Initializes OpenTelemetry tracing and instruments the Google GenAI SDK.
     
@@ -26,13 +43,12 @@ def setup_telemetry():
             logger.info(f"OpenTelemetry Cloud Trace exporter configured for project: {project_id}")
         except ImportError:
             logger.warning(
-                "opentelemetry-exporter-gcp-trace is not installed. Falling back to console exporter."
+                "opentelemetry-exporter-gcp-trace is not installed. Cloud Trace export disabled."
             )
-            provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
+            _maybe_add_console_exporter(provider)
     else:
-        # Fallback to Console exporter for local development if GOOGLE_CLOUD_PROJECT is not set
-        logger.info("GOOGLE_CLOUD_PROJECT not set. Telemetry spans will be output to the console.")
-        provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
+        # Local / CLI: instrument the SDK but stay quiet unless console export is requested.
+        _maybe_add_console_exporter(provider)
         
     trace.set_tracer_provider(provider)
     

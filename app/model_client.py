@@ -4,6 +4,9 @@ import logging
 from typing import Optional
 from google.adk.models.lite_llm import LiteLlm
 
+# Quiet by default: local CLI demos should not spam LiteLLM deprecation warnings.
+os.environ.setdefault("ADK_SUPPRESS_GEMINI_LITELLM_WARNINGS", "true")
+
 # Map standard Google Cloud env vars to Vertex AI equivalents for LiteLLM if not already set
 if "GOOGLE_CLOUD_PROJECT" in os.environ and "VERTEXAI_PROJECT" not in os.environ:
     os.environ["VERTEXAI_PROJECT"] = os.environ["GOOGLE_CLOUD_PROJECT"]
