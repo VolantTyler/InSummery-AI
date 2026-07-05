@@ -117,4 +117,14 @@ class PIIMasker:
             original = self.mask_to_original[placeholder]
             unmasked_text = unmasked_text.replace(placeholder, original)
 
+        # Second pass: LLMs sometimes echo placeholders without the square
+        # brackets (e.g. "CHILD_B" instead of "[CHILD_B]"), which would leak
+        # the placeholder into saved data. Replace bare whole-word variants too.
+        for placeholder in sorted_placeholders:
+            bare = placeholder.strip("[]")
+            if not bare:
+                continue
+            original = self.mask_to_original[placeholder]
+            unmasked_text = re.sub(rf"\b{re.escape(bare)}\b", original, unmasked_text)
+
         return unmasked_text

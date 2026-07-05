@@ -260,29 +260,58 @@ def merge_activities(current_matrix: Dict[str, Any], new_activities: List[Dict[s
             
     return {"activities": updated_activities, "gaps": []}
 
+def _normalize_disruption_field(value: Any) -> str:
+    """Treat placeholder junk the LLM may emit (e.g. 'N/A') as unspecified."""
+    if not value or not isinstance(value, str):
+        return ""
+    if value.strip().lower() in ("n/a", "na", "none", "unknown", "unspecified"):
+        return ""
+    return value.strip()
+
+
+def _titles_match(disruption_title: str, activity_title: str) -> bool:
+    a, b = disruption_title.lower(), (activity_title or "").lower()
+    return bool(a and b) and (a in b or b in a)
+
+
 def apply_disruption(current_matrix: Dict[str, Any], disruption: Dict[str, Any]) -> Dict[str, Any]:
-    """Apply a disruption (e.g. cancellation) to the matrix."""
+    """Apply a disruption (e.g. cancellation) to the matrix.
+
+    An activity is disrupted when the disruption date/time overlaps it AND it
+    matches the identifying details the message provided: the child's name,
+    the activity title, or both. If the message identifies neither, nothing
+    is changed (rather than guessing and disrupting everything); the caller
+    surfaces a warning instead.
+    """
     updated_activities = list(current_matrix.get("activities", []))
-    disrupted_child = disruption.get("child_name")
+    disrupted_child = _normalize_disruption_field(disruption.get("child_name"))
+    disruption_title = _normalize_disruption_field(disruption.get("activity_title"))
     disruption_date = disruption.get("date")
-    
+
+    if not disrupted_child and not disruption_title:
+        return {"activities": updated_activities, "gaps": []}
+
     dis_start = parse_time_to_minutes(disruption.get("start_time", "00:00") or "00:00")
     dis_end = parse_time_to_minutes(disruption.get("end_time", "23:59") or "23:59")
-    
+
     for act in updated_activities:
-        if act.get("child_name") == disrupted_child:
-            act_start_date = parse_date(act["start_date"])
-            act_end_date = parse_date(act["end_date"])
-            target_date = parse_date(disruption_date)
-            
-            if act_start_date <= target_date <= act_end_date:
-                # Check if times overlap
-                act_start = parse_time_to_minutes(act["start_time"])
-                act_end = parse_time_to_minutes(act["end_time"])
-                
-                # Overlap check
-                if max(act_start, dis_start) < min(act_end, dis_end):
-                    act["status"] = "DISRUPTED"
-                    act["notes"] = f"{act.get('notes', '')} [DISRUPTED: {disruption.get('description')}]".strip()
-                    
+        if disrupted_child and act.get("child_name") != disrupted_child:
+            continue
+        if disruption_title and not _titles_match(disruption_title, act.get("activity_title")):
+            continue
+
+        act_start_date = parse_date(act["start_date"])
+        act_end_date = parse_date(act["end_date"])
+        target_date = parse_date(disruption_date)
+
+        if act_start_date <= target_date <= act_end_date:
+            # Check if times overlap
+            act_start = parse_time_to_minutes(act["start_time"])
+            act_end = parse_time_to_minutes(act["end_time"])
+
+            # Overlap check
+            if max(act_start, dis_start) < min(act_end, dis_end):
+                act["status"] = "DISRUPTED"
+                act["notes"] = f"{act.get('notes', '')} [DISRUPTED: {disruption.get('description')}]".strip()
+
     return {"activities": updated_activities, "gaps": []}

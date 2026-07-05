@@ -1,6 +1,7 @@
 export default function AlertsSidebar({ matrix }) {
     const gaps = matrix?.gaps || [];
     const activities = matrix?.activities || [];
+    const warnings = matrix?.warnings || [];
     const disruptions = activities.filter(act => act.status === "DISRUPTED");
 
     return (
@@ -28,6 +29,12 @@ export default function AlertsSidebar({ matrix }) {
             <div className="sidebar-card">
                 <h3>Disruptions & Warnings</h3>
                 <div className="alerts-container">
+                    {warnings.map((warning, idx) => (
+                        <div className="alert-item alert-relative" key={`warn-${idx}`}>
+                            <strong>Warning</strong><br />
+                            <span style={{ fontSize: "12px", opacity: 0.9 }}>{warning}</span>
+                        </div>
+                    ))}
                     {disruptions.length > 0 ? (
                         disruptions.map((dis, idx) => (
                             <div className="alert-item alert-disruption" key={idx}>
@@ -36,9 +43,9 @@ export default function AlertsSidebar({ matrix }) {
                                 <span style={{ fontSize: "12px", opacity: 0.9 }}>{dis.notes || "Activity disrupted"}</span>
                             </div>
                         ))
-                    ) : (
+                    ) : warnings.length === 0 ? (
                         <div className="no-alerts">No active disruptions.</div>
-                    )}
+                    ) : null}
                 </div>
             </div>
         </>

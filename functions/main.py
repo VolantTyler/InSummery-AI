@@ -226,7 +226,10 @@ def handle_resume_workflow(req: https_fn.Request, user_id: str, headers: dict) -
     deserialized_events = deserialize_session_events(saved_state["events"])
     
     session_service = InMemorySessionService()
-    # Pre-populate the session
+    # Pre-populate the session. Events must be appended through the session
+    # service (get_session returns a copy, so assigning session.events
+    # directly leaves the stored session empty and the runner cannot find
+    # the original adk_request_input call to resume from).
     loop = asyncio.new_event_loop()
     loop.run_until_complete(session_service.create_session(
         user_id=user_id,
@@ -234,7 +237,8 @@ def handle_resume_workflow(req: https_fn.Request, user_id: str, headers: dict) -
         app_name="insummery_app"
     ))
     session = loop.run_until_complete(session_service.get_session(user_id=user_id, session_id=session_id, app_name="insummery_app"))
-    session.events = deserialized_events
+    for event in deserialized_events:
+        loop.run_until_complete(session_service.append_event(session, event))
     loop.close()
 
     runner = Runner(
