@@ -9,6 +9,12 @@ from flask import jsonify
 from firebase_functions import https_fn
 from firebase_admin import initialize_app, firestore, auth
 
+# Initialize telemetry BEFORE importing anything that uses the GenAI Client,
+# so that spans emitted during module import (e.g. agent/workflow construction)
+# are captured as well.
+from app.telemetry import setup_telemetry
+setup_telemetry()
+
 from google.adk import Runner, Context
 from google.adk.sessions import InMemorySessionService, Session
 from google.adk.events import RequestInput
