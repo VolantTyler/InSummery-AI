@@ -87,6 +87,18 @@ def deserialize_session_events(events_data: List[Dict[str, Any]]) -> List[Any]:
 @https_fn.on_request()
 def api(req: https_fn.Request) -> https_fn.Response:
     """Main API router for Firebase Cloud Functions."""
+    try:
+        return _route_request(req)
+    finally:
+        # Cloud Functions instances can have their CPU frozen immediately
+        # after the response is sent, before the BatchSpanProcessor's
+        # background thread gets scheduled to export queued spans. Force a
+        # flush here so traces reliably reach Cloud Trace instead of being
+        # silently dropped.
+        from opentelemetry import trace
+        trace.get_tracer_provider().force_flush(timeout_millis=5000)
+
+def _route_request(req: https_fn.Request) -> https_fn.Response:
     # Enable CORS
     if req.method == "OPTIONS":
         headers = {

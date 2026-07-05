@@ -20,13 +20,13 @@ def setup_telemetry():
     project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
     if project_id:
         try:
-            from google.cloud.opentelemetry import CloudTraceSpanExporter
+            from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
             exporter = CloudTraceSpanExporter(project_id=project_id)
             provider.add_span_processor(BatchSpanProcessor(exporter))
             logger.info(f"OpenTelemetry Cloud Trace exporter configured for project: {project_id}")
         except ImportError:
             logger.warning(
-                "google-cloud-opentelemetry is not installed. Falling back to console exporter."
+                "opentelemetry-exporter-gcp-trace is not installed. Falling back to console exporter."
             )
             provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
     else:
