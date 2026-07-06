@@ -375,8 +375,16 @@ header {
     gap: 20px;
 }
 
+.header-actions .btn-outline {
+    background-color: #ffffff;
+}
+
+[data-theme="dark"] .header-actions .btn-outline {
+    background-color: var(--card-bg);
+}
+
 .theme-toggle {
-    background: none;
+    background: #ffffff;
     border: 1px solid var(--border-color);
     color: var(--text-color);
     padding: 8px 16px;
@@ -386,6 +394,10 @@ header {
     font-weight: 600;
     font-family: inherit;
     transition: all 0.2s;
+}
+
+[data-theme="dark"] .theme-toggle {
+    background: var(--card-bg);
 }
 
 .theme-toggle:hover {
@@ -398,6 +410,9 @@ header {
     gap: 12px;
     font-size: 14px;
     font-weight: 500;
+    border: 2px solid var(--text-color);
+    padding: 6px 14px;
+    border-radius: 20px;
 }
 
 /* Main Container */

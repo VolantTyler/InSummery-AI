@@ -315,3 +315,80 @@ def apply_disruption(current_matrix: Dict[str, Any], disruption: Dict[str, Any])
                 act["notes"] = f"{act.get('notes', '')} [DISRUPTED: {disruption.get('description')}]".strip()
 
     return {"activities": updated_activities, "gaps": []}
+
+
+def delete_activity(matrix: Dict[str, Any], activity_id: str, delete_type: str, date_str: str = None) -> Dict[str, Any]:
+    """Delete a single event or entire series from the matrix.
+
+    Args:
+        matrix: The schedule matrix dict with "activities" and optionally "deleted_google_event_ids".
+        activity_id: The ID of the activity to delete.
+        delete_type: "single" to remove one date, "series" to remove the whole activity.
+        date_str: Required when delete_type is "single". The YYYY-MM-DD date to remove.
+
+    Returns:
+        The mutated matrix dict, or raises ValueError on bad input / activity not found.
+    """
+    activities = matrix.get("activities", [])
+
+    # Find the activity
+    activity_idx = -1
+    for i, act in enumerate(activities):
+        if act.get("id") == activity_id:
+            activity_idx = i
+            break
+
+    if activity_idx == -1:
+        raise ValueError(f"Activity with ID {activity_id} not found")
+
+    act = activities[activity_idx]
+
+    if delete_type == "series":
+        google_event_id = act.get("google_event_id")
+        if google_event_id:
+            if "deleted_google_event_ids" not in matrix:
+                matrix["deleted_google_event_ids"] = []
+            matrix["deleted_google_event_ids"].append(google_event_id)
+        activities.pop(activity_idx)
+
+    elif delete_type == "single":
+        if not date_str:
+            raise ValueError("Missing date parameter for single event deletion")
+
+        start_date_str = act.get("start_date")
+        end_date_str = act.get("end_date")
+
+        if start_date_str == end_date_str:
+            # Single-day activity → remove entirely
+            google_event_id = act.get("google_event_id")
+            if google_event_id:
+                if "deleted_google_event_ids" not in matrix:
+                    matrix["deleted_google_event_ids"] = []
+                matrix["deleted_google_event_ids"].append(google_event_id)
+            activities.pop(activity_idx)
+        elif date_str == start_date_str:
+            dt = datetime.strptime(start_date_str, "%Y-%m-%d")
+            act["start_date"] = (dt + timedelta(days=1)).strftime("%Y-%m-%d")
+        elif date_str == end_date_str:
+            dt = datetime.strptime(end_date_str, "%Y-%m-%d")
+            act["end_date"] = (dt - timedelta(days=1)).strftime("%Y-%m-%d")
+        else:
+            # Split the activity into two halves around date_str
+            target_dt = datetime.strptime(date_str, "%Y-%m-%d")
+            part1_end = (target_dt - timedelta(days=1)).strftime("%Y-%m-%d")
+            part2_start = (target_dt + timedelta(days=1)).strftime("%Y-%m-%d")
+
+            # Copy before mutating
+            new_act = dict(act)
+            new_act["id"] = str(uuid.uuid4())[:8]
+            new_act["start_date"] = part2_start
+            new_act.pop("google_event_id", None)
+
+            act["end_date"] = part1_end
+            activities.insert(activity_idx + 1, new_act)
+    else:
+        raise ValueError("Invalid delete_type. Must be 'single' or 'series'")
+
+    matrix["activities"] = activities
+    return matrix
+
