@@ -145,6 +145,7 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
         }
     };
 
+    const calendarConnected = profile?.google_calendar_connected === true;
 
     return (
         <div id="dashboard-view" className="view">
@@ -158,12 +159,15 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
                     <button className="btn btn-sm btn-outline" onClick={() => setProfileOpen(true)}>
                         Family Profile
                     </button>
-                    <button className="btn btn-sm btn-outline" onClick={handleConnectCalendar}>
-                        Connect Google Calendar
-                    </button>
-                    <button className="btn btn-sm btn-outline" onClick={handleSyncCalendar}>
-                        Sync Calendar
-                    </button>
+                    {calendarConnected ? (
+                        <button className="btn btn-sm btn-outline" onClick={handleSyncCalendar}>
+                            Sync Calendar
+                        </button>
+                    ) : (
+                        <button className="btn btn-sm btn-outline" onClick={handleConnectCalendar}>
+                            Connect Google Calendar
+                        </button>
+                    )}
                     <button className="theme-toggle" onClick={onToggleTheme}>
                         {theme === "dark" ? "Light Mode" : "Dark Mode"}
                     </button>
@@ -190,12 +194,15 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
                             <button className="dropdown-item" onClick={() => { setProfileOpen(true); setMenuOpen(false); }}>
                                 Family Profile
                             </button>
-                            <button className="dropdown-item" onClick={() => { handleConnectCalendar(); setMenuOpen(false); }}>
-                                Connect Google Calendar
-                            </button>
-                            <button className="dropdown-item" onClick={() => { handleSyncCalendar(); setMenuOpen(false); }}>
-                                Sync Calendar
-                            </button>
+                            {calendarConnected ? (
+                                <button className="dropdown-item" onClick={() => { handleSyncCalendar(); setMenuOpen(false); }}>
+                                    Sync Calendar
+                                </button>
+                            ) : (
+                                <button className="dropdown-item" onClick={() => { handleConnectCalendar(); setMenuOpen(false); }}>
+                                    Connect Google Calendar
+                                </button>
+                            )}
                             <button className="dropdown-item" onClick={() => { onToggleTheme(); setMenuOpen(false); }}>
                                 {theme === "dark" ? "Light Mode" : "Dark Mode"}
                             </button>
