@@ -222,3 +222,38 @@ We will write unit and integration tests under the `tests/` directory:
 3. **Web Interface & Firebase Auth**: Run the Vite dev server, register a user using email/password, and log in. Test the Google SSO flow.
 4. **Cloud Function E2E Execution**: Paste a scheduling email into the React web app. Verify that the request is sent to the Python Cloud Function, executes the workflow, stores the resulting matrix in Firestore, and updates the UI grid in real-time.
 5. **Google Calendar Sync**: Verify that events are correctly created and updated in Google Calendar. Check that disrupted events are marked with `[DISRUPTED]` instead of deleted.
+
+---
+
+## Phase 5: Mobile Navigation Dropdown Menu
+
+### Proposed Changes
+
+#### [MODIFY] [Dashboard.jsx](file:///Users/tylerstahl/antigravity/InSummery-AI/frontend/src/components/Dashboard.jsx)
+- Import `useEffect` from `react`.
+- Add a new state variable `menuOpen` to track the state of the mobile dropdown.
+- Implement a click-outside handler using `useEffect` to close the mobile menu automatically when the user clicks outside.
+- Update the markup under `<header>`:
+  - Add class `.desktop-nav` to the desktop header actions container.
+  - Add a new container `.mobile-menu-container` containing:
+    - A toggle button displaying the user's display name or email, alongside a chevron SVG indicator.
+    - A dropdown menu `.mobile-dropdown-menu` with buttons for *Family Profile*, *Connect Google Calendar*, *Sync Calendar*, *Light/Dark Mode*, and *Sign Out*.
+    - Ensure selecting any menu item closes the dropdown menu by resetting `menuOpen` to `false`.
+
+#### [MODIFY] [index.css](file:///Users/tylerstahl/antigravity/InSummery-AI/frontend/src/index.css)
+- Restructure the mobile query `@media (max-width: 768px)` to hide `.desktop-nav` and display `.mobile-menu-container`.
+- Fix the mobile header to prevent wrapping: align items horizontally and space them.
+- Define styles for `.mobile-menu-container` (relative positioning) and `.mobile-dropdown-menu` (absolute positioning, glassmorphism card styling, shadow, custom dropdown items, hover states, and dropdown opening scale animation).
+- Add support for chevron rotation transitions based on the `.open` class.
+
+### Verification Plan
+
+#### Manual Verification
+- Resize the browser viewport below `768px` to trigger mobile view.
+- Verify the header actions collapse into a single button displaying the logged-in user's display name or email.
+- Click the button to toggle the dropdown. Ensure the chevron rotates smoothly and the dropdown menu appears with a slide-down animation.
+- Check that clicking "Family Profile" opens the family profile modal and closes the dropdown menu.
+- Verify that clicking "Light Mode" or "Dark Mode" updates the application theme and closes the dropdown menu.
+- Click outside the dropdown menu and verify that it closes automatically.
+- Click "Sign Out" and verify that the user is logged out of the app.
+
