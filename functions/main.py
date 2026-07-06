@@ -93,7 +93,11 @@ def deserialize_session_events(events_data: List[Dict[str, Any]]) -> List[Any]:
 # note Firebase Hosting's `/api/**` rewrite still hard-caps proxied requests
 # at 60s regardless of this setting, so slow endpoints must be called via
 # the function's direct URL (see frontend/src/firebase.js DIRECT_API_URL).
-@https_fn.on_request(timeout_sec=300, memory=options.MemoryOption.GB_1)
+@https_fn.on_request(
+    timeout_sec=300,
+    memory=options.MemoryOption.GB_1,
+    secrets=["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]
+)
 def api(req: https_fn.Request) -> https_fn.Response:
     """Main API router for Firebase Cloud Functions."""
     try:

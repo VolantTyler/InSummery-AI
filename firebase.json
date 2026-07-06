@@ -15,10 +15,6 @@
         ".git",
         "firebase-debug.log",
         "firestore-debug.log"
-      ],
-      "secretEnvironmentVariables": [
-        { "key": "GOOGLE_CLIENT_ID", "secret": "GOOGLE_CLIENT_ID" },
-        { "key": "GOOGLE_CLIENT_SECRET", "secret": "GOOGLE_CLIENT_SECRET" }
       ]
     }
   ],
