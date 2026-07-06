@@ -1,3 +1,5 @@
+import { formatTimeRange12h } from "../timeUtils.js";
+
 // Renders the day-by-day schedule matrix: children on one axis, weekdays as cards.
 
 function isDateInBaseline(date, baseline) {
@@ -119,7 +121,7 @@ export default function MatrixGrid({ matrix, profile }) {
                                         {items.length > 0 ? (
                                             items.map((item, idx) => (
                                                 <div className={`timeline-item ${item.className}`} key={idx}>
-                                                    <div className="item-time">{item.start_time} - {item.end_time}</div>
+                                                    <div className="item-time">{formatTimeRange12h(item.start_time, item.end_time)}</div>
                                                     <div className="item-title">{item.title}</div>
                                                     {item.notes && <div className="item-notes">{item.notes}</div>}
                                                 </div>

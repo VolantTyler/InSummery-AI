@@ -336,10 +336,13 @@ def handle_get_profile(user_id: str, headers: dict) -> https_fn.Response:
     profile = storage.get_profile(user_id)
     if not profile:
         return https_fn.Response(json.dumps({"onboarding_required": True}), status=200, headers=headers, mimetype="application/json")
+    token_ref = get_db().collection("users").document(user_id).collection("tokens").document("google_calendar")
+    profile["google_calendar_connected"] = token_ref.get().exists
     return https_fn.Response(json.dumps(profile), status=200, headers=headers, mimetype="application/json")
 
 def handle_save_profile(req: https_fn.Request, user_id: str, headers: dict) -> https_fn.Response:
     data = req.get_json() or {}
+    data.pop("google_calendar_connected", None)
     storage = FirestoreStorageProvider()
     storage.save_profile(user_id, data)
     return https_fn.Response(json.dumps({"status": "SUCCESS"}), status=200, headers=headers, mimetype="application/json")

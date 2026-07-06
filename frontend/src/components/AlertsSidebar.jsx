@@ -1,3 +1,5 @@
+import { formatTimeRange12h } from "../timeUtils.js";
+
 export default function AlertsSidebar({ matrix }) {
     const gaps = matrix?.gaps || [];
     const activities = matrix?.activities || [];
@@ -16,7 +18,7 @@ export default function AlertsSidebar({ matrix }) {
                                 key={idx}
                             >
                                 <strong>{gap.child_name}</strong> ({gap.date})<br />
-                                {gap.start_time} - {gap.end_time}<br />
+                                {formatTimeRange12h(gap.start_time, gap.end_time)}<br />
                                 <span style={{ fontSize: "12px", opacity: 0.9 }}>{gap.description}</span>
                             </div>
                         ))
@@ -39,7 +41,7 @@ export default function AlertsSidebar({ matrix }) {
                         disruptions.map((dis, idx) => (
                             <div className="alert-item alert-disruption" key={idx}>
                                 <strong>{dis.child_name}</strong> ({dis.start_date})<br />
-                                {dis.start_time} - {dis.end_time}<br />
+                                {formatTimeRange12h(dis.start_time, dis.end_time)}<br />
                                 <span style={{ fontSize: "12px", opacity: 0.9 }}>{dis.notes || "Activity disrupted"}</span>
                             </div>
                         ))
