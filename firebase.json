@@ -8,13 +8,17 @@
       "codebase": "default",
       "runtime": "python312",
       "predeploy": [
-        "python bin/predeploy.py"
+        "python3 bin/predeploy.py"
       ],
       "ignore": [
         "venv",
         ".git",
         "firebase-debug.log",
         "firestore-debug.log"
+      ],
+      "secretEnvironmentVariables": [
+        { "key": "GOOGLE_CLIENT_ID", "secret": "GOOGLE_CLIENT_ID" },
+        { "key": "GOOGLE_CLIENT_SECRET", "secret": "GOOGLE_CLIENT_SECRET" }
       ]
     }
   ],
