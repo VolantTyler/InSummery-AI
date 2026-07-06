@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { auth, authSignOut } from "../firebase.js";
 import { apiFetch } from "../api.js";
+import BrandLogo from "./BrandLogo.jsx";
 import MatrixGrid from "./MatrixGrid.jsx";
 import AlertsSidebar from "./AlertsSidebar.jsx";
 import HitlModal from "./HitlModal.jsx";
@@ -71,7 +72,7 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
         <div id="dashboard-view" className="view">
             <header>
                 <div className="header-brand">
-                    <h1>InSummery</h1>
+                    <BrandLogo size={36} textClassName="header-brand-title" />
                     <span className="badge">Concierge Active</span>
                 </div>
                 <div className="header-actions">
