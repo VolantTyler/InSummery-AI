@@ -24,6 +24,7 @@ from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from google_auth_oauthlib.flow import Flow
 
 from app.agent import insummery_workflow
 from app.storage import FirestoreStorageProvider
@@ -111,13 +112,17 @@ def _route_request(req: https_fn.Request) -> https_fn.Response:
 
     headers = {"Access-Control-Allow-Origin": "*"}
 
+    path = req.path.replace("/api", "")
+
+    # Bypass authentication for Google Calendar OAuth Callback
+    if path == "/oauth/google-calendar/callback" and req.method == "GET":
+        return handle_oauth_callback(req, headers)
+
     try:
         user_id = verify_auth_token(req)
     except ValueError as e:
         return https_fn.Response(json.dumps({"error": str(e)}), status=401, headers=headers, mimetype="application/json")
 
-    path = req.path.replace("/api", "")
-    
     if path == "/process-email" and req.method == "POST":
         return handle_process_email(req, user_id, headers)
     elif path == "/resume-workflow" and req.method == "POST":
@@ -130,6 +135,8 @@ def _route_request(req: https_fn.Request) -> https_fn.Response:
         return handle_get_profile(user_id, headers)
     elif path == "/save-profile" and req.method == "POST":
         return handle_save_profile(req, user_id, headers)
+    elif path == "/oauth/google-calendar/start" and req.method == "GET":
+        return handle_oauth_start(req, user_id, headers)
     else:
         return https_fn.Response(json.dumps({"error": "Not Found"}), status=404, headers=headers, mimetype="application/json")
 
@@ -418,3 +425,133 @@ def handle_sync_calendar(user_id: str, headers: dict) -> https_fn.Response:
     except Exception as e:
         logger.error(f"Calendar sync failed: {e}")
         return https_fn.Response(json.dumps({"error": f"Calendar sync failed: {str(e)}"}), status=500, headers=headers, mimetype="application/json")
+
+def handle_oauth_start(req: https_fn.Request, user_id: str, headers: dict) -> https_fn.Response:
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+    if not client_id or not client_secret:
+        return https_fn.Response(
+            json.dumps({"error": "Google Calendar OAuth environment variables (GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET) are not configured."}),
+            status=500,
+            headers=headers,
+            mimetype="application/json"
+        )
+    
+    # Construct redirect URI dynamically
+    is_emulator = os.getenv("FIRESTORE_EMULATOR_HOST") or os.getenv("FIREBASE_AUTH_EMULATOR_HOST")
+    host = req.headers.get("Host", "")
+    if is_emulator or "localhost" in host or "127.0.0.1" in host:
+        redirect_uri = "http://localhost:5000/api/oauth/google-calendar/callback"
+    else:
+        clean_host = host.split(":")[0] if host else "in-summery.web.app"
+        redirect_uri = f"https://{clean_host}/api/oauth/google-calendar/callback"
+        
+    client_config = {
+        "web": {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }
+    }
+    
+    try:
+        flow = Flow.from_client_config(
+            client_config,
+            scopes=["https://www.googleapis.com/auth/calendar.events"]
+        )
+        flow.redirect_uri = redirect_uri
+        
+        authorization_url, state = flow.authorization_url(
+            access_type="offline",
+            prompt="consent",
+            state=user_id
+        )
+        
+        return https_fn.Response(
+            json.dumps({"url": authorization_url}),
+            status=200,
+            headers=headers,
+            mimetype="application/json"
+        )
+    except Exception as e:
+        logger.error(f"Failed to generate authorization URL: {e}")
+        return https_fn.Response(
+            json.dumps({"error": f"Failed to generate authorization URL: {str(e)}"}),
+            status=500,
+            headers=headers,
+            mimetype="application/json"
+        )
+
+def handle_oauth_callback(req: https_fn.Request, headers: dict) -> https_fn.Response:
+    code = req.args.get("code")
+    state = req.args.get("state")
+    
+    if not code or not state:
+        return https_fn.Response(
+            json.dumps({"error": "Missing code or state parameter."}),
+            status=400,
+            headers=headers,
+            mimetype="application/json"
+        )
+        
+    user_id = state
+    
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+    if not client_id or not client_secret:
+        return https_fn.Response(
+            json.dumps({"error": "Google Calendar OAuth environment variables are not configured."}),
+            status=500,
+            headers=headers,
+            mimetype="application/json"
+        )
+        
+    is_emulator = os.getenv("FIRESTORE_EMULATOR_HOST") or os.getenv("FIREBASE_AUTH_EMULATOR_HOST")
+    host = req.headers.get("Host", "")
+    if is_emulator or "localhost" in host or "127.0.0.1" in host:
+        redirect_uri = "http://localhost:5000/api/oauth/google-calendar/callback"
+        redirect_url = "http://localhost:5000/"
+    else:
+        clean_host = host.split(":")[0] if host else "in-summery.web.app"
+        redirect_uri = f"https://{clean_host}/api/oauth/google-calendar/callback"
+        redirect_url = f"https://{clean_host}/"
+        
+    client_config = {
+        "web": {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }
+    }
+    
+    try:
+        flow = Flow.from_client_config(
+            client_config,
+            scopes=["https://www.googleapis.com/auth/calendar.events"]
+        )
+        flow.redirect_uri = redirect_uri
+        flow.fetch_token(code=code)
+        
+        creds = flow.credentials
+        
+        db = get_db()
+        token_ref = db.collection("users").document(user_id).collection("tokens").document("google_calendar")
+        token_ref.set({
+            "access_token": creds.token,
+            "refresh_token": creds.refresh_token,
+            "expiry": creds.expiry.isoformat() if creds.expiry else None
+        })
+        
+        return https_fn.Response(status=302, headers={"Location": redirect_url})
+        
+    except Exception as e:
+        logger.error(f"Failed to complete OAuth callback: {e}")
+        return https_fn.Response(
+            json.dumps({"error": f"Failed to complete OAuth callback: {str(e)}"}),
+            status=500,
+            headers=headers,
+            mimetype="application/json"
+        )
+
