@@ -68,6 +68,37 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
         }
     };
 
+    const handleConnectCalendar = async () => {
+        showStatus("Connecting Google Calendar...", "loading");
+        try {
+            const res = await apiFetch(token, "oauth/google-calendar/start");
+            if (res.url) {
+                window.location.href = res.url;
+            } else {
+                showStatus("Failed to retrieve Google Authorization URL.", "error");
+            }
+        } catch (err) {
+            showStatus(`Connection failed: ${err.message}`, "error");
+        }
+    };
+
+    const handleSyncCalendar = async () => {
+        showStatus("Syncing with Google Calendar...", "loading");
+        try {
+            const res = await apiFetch(token, "sync-calendar", {
+                method: "POST"
+            });
+            if (res.status === "SUCCESS") {
+                showStatus("Google Calendar synced successfully!", "success");
+            } else {
+                showStatus(`Sync failed: ${res.error || "Unknown error"}`, "error");
+            }
+        } catch (err) {
+            showStatus(`Sync failed: ${err.message}`, "error");
+        }
+    };
+
+
     return (
         <div id="dashboard-view" className="view">
             <header>
@@ -79,7 +110,14 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
                     <button className="btn btn-sm btn-outline" onClick={() => setProfileOpen(true)}>
                         Family Profile
                     </button>
+                    <button className="btn btn-sm btn-outline" onClick={handleConnectCalendar}>
+                        Connect Google Calendar
+                    </button>
+                    <button className="btn btn-sm btn-outline" onClick={handleSyncCalendar}>
+                        Sync Calendar
+                    </button>
                     <button className="theme-toggle" onClick={onToggleTheme}>
+
                         {theme === "dark" ? "Light Mode" : "Dark Mode"}
                     </button>
                     <div className="user-profile">

@@ -5,6 +5,12 @@ import asyncio
 import json
 import webbrowser
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load the project-root .env regardless of the current working directory
+# the CLI is invoked from (e.g. `insummery` console script vs `python bin/insummery`).
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
+
 from google.adk import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.events import RequestInput

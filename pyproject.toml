@@ -29,6 +29,7 @@ dependencies = [
     "gcsfs>=2024.3.0",
     "opentelemetry-exporter-gcp-trace>=1.6.0",
     "pyyaml>=6.0.0",
+    "python-dotenv>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -41,6 +42,7 @@ dev = [
 [project.scripts]
 insummery = "app.cli:main"
 insummery-eval = "app.evaluation.cli:main"
+insummery-mcp = "app.mcp_server:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
