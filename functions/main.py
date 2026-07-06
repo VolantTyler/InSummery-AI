@@ -438,6 +438,22 @@ def handle_sync_calendar(user_id: str, headers: dict) -> https_fn.Response:
         logger.error(f"Calendar sync failed: {e}")
         return https_fn.Response(json.dumps({"error": f"Calendar sync failed: {str(e)}"}), status=500, headers=headers, mimetype="application/json")
 
+def get_oauth_request_host(req: https_fn.Request) -> str:
+    """Resolve the externally-visible host for OAuth redirect URIs.
+
+    When requests arrive through a Firebase Hosting rewrite, the Host header
+    contains the internal Cloud Run host (e.g. api-xxxx-uc.a.run.app) while
+    the original domain the browser used is in X-Forwarded-Host. The OAuth
+    redirect URI must be built from the original domain, since that is what
+    is registered in the Google Cloud OAuth client.
+    """
+    forwarded_host = req.headers.get("X-Forwarded-Host", "")
+    if forwarded_host:
+        # May be a comma-separated list if multiple proxies are involved;
+        # the first entry is the original client-facing host.
+        return forwarded_host.split(",")[0].strip()
+    return req.headers.get("Host", "")
+
 def handle_oauth_start(req: https_fn.Request, user_id: str, headers: dict) -> https_fn.Response:
     client_id = os.getenv("GOOGLE_CLIENT_ID")
     client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
@@ -451,7 +467,7 @@ def handle_oauth_start(req: https_fn.Request, user_id: str, headers: dict) -> ht
     
     # Construct redirect URI dynamically
     is_emulator = os.getenv("FIRESTORE_EMULATOR_HOST") or os.getenv("FIREBASE_AUTH_EMULATOR_HOST")
-    host = req.headers.get("Host", "")
+    host = get_oauth_request_host(req)
     if is_emulator or "localhost" in host or "127.0.0.1" in host:
         redirect_uri = "http://localhost:5000/api/oauth/google-calendar/callback"
     else:
@@ -520,7 +536,7 @@ def handle_oauth_callback(req: https_fn.Request, headers: dict) -> https_fn.Resp
         )
         
     is_emulator = os.getenv("FIRESTORE_EMULATOR_HOST") or os.getenv("FIREBASE_AUTH_EMULATOR_HOST")
-    host = req.headers.get("Host", "")
+    host = get_oauth_request_host(req)
     if is_emulator or "localhost" in host or "127.0.0.1" in host:
         redirect_uri = "http://localhost:5000/api/oauth/google-calendar/callback"
         redirect_url = "http://localhost:5000/"
