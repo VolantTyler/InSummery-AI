@@ -13,13 +13,16 @@ SIZES = {
     "icon-512.png": 512,
 }
 
-BG = (255, 248, 225)
+BG = (200, 230, 255)
 RAY_LARGE = (255, 193, 7)
 RAY_SMALL = (255, 213, 79)
 CORE_INNER = (255, 241, 118)
 CORE_MID = (255, 214, 0)
 CORE_OUTER = (255, 179, 0)
 CORE_STROKE = (255, 143, 0, 90)
+
+LARGE_RAY = [(0, -44), (8, -15), (-8, -15)]
+SMALL_RAY = [(31, -31), (20, -13), (13, -20)]
 
 
 def rotate_point(x: float, y: float, angle_deg: float) -> tuple[float, float]:
@@ -28,26 +31,32 @@ def rotate_point(x: float, y: float, angle_deg: float) -> tuple[float, float]:
     return x * cos_a - y * sin_a, x * sin_a + y * cos_a
 
 
-def triangle(draw: ImageDraw.ImageDraw, cx: float, cy: float, scale: float, angle: float, color):
-    points = [(0, -38 * scale), (7 * scale, -18 * scale), (-7 * scale, -18 * scale)]
-    rotated = [rotate_point(x, y, angle) for x, y in points]
+def draw_ray(
+    draw: ImageDraw.ImageDraw,
+    cx: float,
+    cy: float,
+    scale: float,
+    points: list[tuple[float, float]],
+    color,
+    angle: float = 0,
+):
+    rotated = [rotate_point(x * scale, y * scale, angle) for x, y in points]
     draw.polygon([(cx + x, cy + y) for x, y in rotated], fill=color)
 
 
 def draw_icon(size: int) -> Image.Image:
-    img = Image.new("RGBA", (size, size), BG + (255,))
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img, "RGBA")
     scale = size / 100
     cx = cy = size / 2
-    radius = int(18 * scale)
+    corner_radius = int(18 * scale)
+
+    draw.rounded_rectangle((0, 0, size - 1, size - 1), radius=corner_radius, fill=BG + (255,))
 
     for angle in (0, 90, 180, 270):
-        triangle(draw, cx, cy, scale, angle, RAY_LARGE)
-    for angle in (45, 135, 225, 315):
-        small_scale = scale * 0.72
-        points = [(27 * small_scale, -27 * small_scale), (32 * small_scale, -14 * small_scale), (20 * small_scale, -20 * small_scale)]
-        rotated = [rotate_point(x, y, angle) for x, y in points]
-        draw.polygon([(cx + x, cy + y) for x, y in rotated], fill=RAY_SMALL)
+        draw_ray(draw, cx, cy, scale, LARGE_RAY, RAY_LARGE, angle)
+    for angle in (0, 90, 180, 270):
+        draw_ray(draw, cx, cy, scale, SMALL_RAY, RAY_SMALL, angle)
 
     core_r = int(17 * scale)
     for i, color in enumerate((CORE_OUTER, CORE_MID, CORE_INNER)):
@@ -56,9 +65,8 @@ def draw_icon(size: int) -> Image.Image:
         bbox = (cx - r + offset, cy - r - offset, cx + r + offset, cy + r - offset)
         draw.ellipse(bbox, fill=color)
 
-    stroke_r = core_r
     draw.ellipse(
-        (cx - stroke_r, cy - stroke_r, cx + stroke_r, cy + stroke_r),
+        (cx - core_r, cy - core_r, cx + core_r, cy + core_r),
         outline=CORE_STROKE,
         width=max(1, int(1.2 * scale)),
     )

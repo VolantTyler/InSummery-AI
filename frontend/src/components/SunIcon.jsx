@@ -19,18 +19,19 @@ export default function SunIcon({ className = "", size = 40, title = "InSummery"
                     <stop offset="100%" stopColor="#FFB300" />
                 </radialGradient>
             </defs>
+            <rect width="100" height="100" rx="18" fill="#C8E6FF" />
             <g transform="translate(50 50)">
                 <g fill="#FFC107">
-                    <polygon points="0,-38 7,-18 -7,-18" />
-                    <polygon points="0,38 -7,18 7,18" />
-                    <polygon points="-38,0 -18,-7 -18,7" />
-                    <polygon points="38,0 18,7 18,-7" />
+                    <polygon points="0,-44 8,-15 -8,-15" />
+                    <polygon points="44,0 15,8 15,-8" />
+                    <polygon points="0,44 -8,15 8,15" />
+                    <polygon points="-44,0 -15,-8 -15,8" />
                 </g>
                 <g fill="#FFD54F">
-                    <polygon points="27,-27 32,-14 20,-20" />
-                    <polygon points="27,27 20,20 32,14" />
-                    <polygon points="-27,27 -20,20 -32,14" />
-                    <polygon points="-27,-27 -32,-14 -20,-20" />
+                    <polygon points="31,-31 20,-13 13,-20" />
+                    <polygon points="31,31 13,20 20,13" />
+                    <polygon points="-31,31 -20,13 -13,20" />
+                    <polygon points="-31,-31 -13,-20 -20,-13" />
                 </g>
                 <circle r="17" fill={`url(#${gradientId})`} />
                 <circle r="17" fill="none" stroke="#FF8F00" strokeWidth="1.2" opacity="0.35" />

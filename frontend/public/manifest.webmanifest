@@ -4,8 +4,8 @@
   "description": "Your family schedule concierge for summer and beyond.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#FFF8E1",
-  "theme_color": "#FFC107",
+  "background_color": "#C8E6FF",
+  "theme_color": "#C8E6FF",
   "icons": [
     {
       "src": "/icon-192.png",
