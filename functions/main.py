@@ -484,9 +484,15 @@ def handle_oauth_start(req: https_fn.Request, user_id: str, headers: dict) -> ht
     }
     
     try:
+        # PKCE must be disabled: the code_verifier generated here would live
+        # only in this invocation's memory, but the token exchange happens in
+        # a separate callback invocation that cannot know it. As a
+        # confidential client we authenticate the exchange with client_secret
+        # instead.
         flow = Flow.from_client_config(
             client_config,
-            scopes=["https://www.googleapis.com/auth/calendar.events"]
+            scopes=["https://www.googleapis.com/auth/calendar.events"],
+            autogenerate_code_verifier=False
         )
         flow.redirect_uri = redirect_uri
         
@@ -555,9 +561,12 @@ def handle_oauth_callback(req: https_fn.Request, headers: dict) -> https_fn.Resp
     }
     
     try:
+        # PKCE disabled to match the authorization request (see
+        # handle_oauth_start); the exchange authenticates with client_secret.
         flow = Flow.from_client_config(
             client_config,
-            scopes=["https://www.googleapis.com/auth/calendar.events"]
+            scopes=["https://www.googleapis.com/auth/calendar.events"],
+            autogenerate_code_verifier=False
         )
         flow.redirect_uri = redirect_uri
         flow.fetch_token(code=code)
