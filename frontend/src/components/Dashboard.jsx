@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { auth, authSignOut } from "../firebase.js";
 import { apiFetch } from "../api.js";
 import BrandLogo from "./BrandLogo.jsx";
@@ -14,6 +14,19 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
     const [submitting, setSubmitting] = useState(false);
     const [hitl, setHitl] = useState(null); // { workflowId, question }
     const [profileOpen, setProfileOpen] = useState(false);
+    const [menuOpen, setMenuOpen] = useState(false);
+
+    // Close mobile dropdown when clicking outside
+    useEffect(() => {
+        if (!menuOpen) return;
+        const handleOutsideClick = (e) => {
+            if (!e.target.closest(".mobile-menu-container")) {
+                setMenuOpen(false);
+            }
+        };
+        document.addEventListener("click", handleOutsideClick);
+        return () => document.removeEventListener("click", handleOutsideClick);
+    }, [menuOpen]);
 
     const showStatus = (msg, type) => setIngestStatus({ msg, type });
 
@@ -106,7 +119,8 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
                     <BrandLogo size={36} textClassName="header-brand-title" />
                     <span className="badge">Concierge Active</span>
                 </div>
-                <div className="header-actions">
+                {/* Desktop Nav Actions */}
+                <div className="header-actions desktop-nav">
                     <button className="btn btn-sm btn-outline" onClick={() => setProfileOpen(true)}>
                         Family Profile
                     </button>
@@ -117,15 +131,47 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
                         Sync Calendar
                     </button>
                     <button className="theme-toggle" onClick={onToggleTheme}>
-
                         {theme === "dark" ? "Light Mode" : "Dark Mode"}
                     </button>
                     <div className="user-profile">
-                        <span>{user.displayName || user.email}</span>
-                        <button className="btn btn-sm btn-outline" onClick={() => authSignOut(auth)}>
-                            Sign Out
-                        </button>
+                        <span>{user ? (user.displayName || user.email) : "Sign In"}</span>
+                        {user && (
+                            <button className="btn btn-sm btn-outline" onClick={() => authSignOut(auth)}>
+                                Sign Out
+                            </button>
+                        )}
                     </div>
+                </div>
+
+                {/* Mobile Nav Actions */}
+                <div className="mobile-menu-container">
+                    <button className="mobile-menu-toggle" onClick={() => setMenuOpen(!menuOpen)}>
+                        <span>{user ? (user.displayName || user.email) : "Sign In"}</span>
+                        <svg className={`chevron-icon ${menuOpen ? 'open' : ''}`} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </button>
+                    {menuOpen && (
+                        <div className="mobile-dropdown-menu">
+                            <button className="dropdown-item" onClick={() => { setProfileOpen(true); setMenuOpen(false); }}>
+                                Family Profile
+                            </button>
+                            <button className="dropdown-item" onClick={() => { handleConnectCalendar(); setMenuOpen(false); }}>
+                                Connect Google Calendar
+                            </button>
+                            <button className="dropdown-item" onClick={() => { handleSyncCalendar(); setMenuOpen(false); }}>
+                                Sync Calendar
+                            </button>
+                            <button className="dropdown-item" onClick={() => { onToggleTheme(); setMenuOpen(false); }}>
+                                {theme === "dark" ? "Light Mode" : "Dark Mode"}
+                            </button>
+                            {user && (
+                                <button className="dropdown-item logout-item" onClick={() => { authSignOut(auth); setMenuOpen(false); }}>
+                                    Sign Out
+                                </button>
+                            )}
+                        </div>
+                    )}
                 </div>
             </header>
 
