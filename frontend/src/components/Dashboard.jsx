@@ -6,6 +6,7 @@ import MatrixGrid from "./MatrixGrid.jsx";
 import AlertsSidebar from "./AlertsSidebar.jsx";
 import HitlModal from "./HitlModal.jsx";
 import ProfileModal from "./ProfileModal.jsx";
+import DeleteActivityModal from "./DeleteActivityModal.jsx";
 
 export default function Dashboard({ user, token, profile, matrix, loadError, onReload, theme, onToggleTheme }) {
     const [ingestText, setIngestText] = useState("");
@@ -15,6 +16,35 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
     const [hitl, setHitl] = useState(null); // { workflowId, question }
     const [profileOpen, setProfileOpen] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
+    const [selectedActivity, setSelectedActivity] = useState(null); // { id, date, title, start_date, end_date }
+
+    const handleActivityClick = (id, date, title, start_date, end_date) => {
+        setSelectedActivity({ id, date, title, start_date, end_date });
+    };
+
+    const handleDeleteActivity = async (deleteType) => {
+        if (!selectedActivity) return;
+        showStatus("Deleting activity...", "loading");
+        const actId = selectedActivity.id;
+        const actDate = selectedActivity.date;
+        setSelectedActivity(null);
+
+        try {
+            const res = await apiFetch(token, "delete-activity", {
+                method: "POST",
+                body: JSON.stringify({
+                    activity_id: actId,
+                    delete_type: deleteType,
+                    date: actDate
+                }),
+                baseUrl: DIRECT_API_URL
+            });
+            showStatus("Activity deleted successfully!", "success");
+            onReload();
+        } catch (err) {
+            showStatus(`Error deleting activity: ${err.message}`, "error");
+        }
+    };
 
     // Close mobile dropdown when clicking outside
     useEffect(() => {
@@ -238,7 +268,7 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
                                 Error loading schedule: {loadError}
                             </div>
                         ) : matrix && profile ? (
-                            <MatrixGrid matrix={matrix} profile={profile} />
+                            <MatrixGrid matrix={matrix} profile={profile} onActivityClick={handleActivityClick} />
                         ) : (
                             <div className="loading-placeholder">Loading schedule matrix...</div>
                         )}
@@ -258,6 +288,14 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
             )}
 
             {hitl && <HitlModal question={hitl.question} onSubmit={handleHitlSubmit} />}
+
+            {selectedActivity && (
+                <DeleteActivityModal
+                    activity={selectedActivity}
+                    onDelete={handleDeleteActivity}
+                    onClose={() => setSelectedActivity(null)}
+                />
+            )}
         </div>
     );
 }
