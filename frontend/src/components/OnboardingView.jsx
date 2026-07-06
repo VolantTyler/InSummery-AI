@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { apiFetch } from "../api.js";
+import BrandLogo from "./BrandLogo.jsx";
 import {
     PersonRow,
     ChildRow,
@@ -65,7 +66,7 @@ export default function OnboardingView({ user, token, onCompleted }) {
         <div id="onboarding-view" className="view">
             <div className="onboarding-card">
                 <div className="onboarding-header">
-                    <h2>Welcome to InSummery</h2>
+                    <BrandLogo size={52} textClassName="onboarding-brand-title" />
                     <p>Let's set up your family profile to get started.</p>
                 </div>
 

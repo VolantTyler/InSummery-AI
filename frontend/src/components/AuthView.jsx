@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { auth, authSignIn, authSignUp, authSignInPopup, GoogleAuthProvider } from "../firebase.js";
+import BrandLogo from "./BrandLogo.jsx";
 
 function GoogleIcon() {
     return (
@@ -66,7 +67,7 @@ export default function AuthView() {
         <div id="auth-view" className="view">
             <div className="auth-card">
                 <div className="auth-header">
-                    <h2>InSummery</h2>
+                    <BrandLogo size={56} textClassName="auth-brand-title" />
                     <p>Your Family Schedule Concierge</p>
                 </div>
 

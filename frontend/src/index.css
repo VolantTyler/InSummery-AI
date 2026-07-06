@@ -153,6 +153,41 @@ body {
     margin-bottom: 30px;
 }
 
+.brand-logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+}
+
+.brand-logo-icon {
+    flex-shrink: 0;
+}
+
+.brand-logo-text,
+.auth-brand-title,
+.header-brand-title,
+.onboarding-brand-title {
+    font-weight: 700;
+    color: var(--primary);
+}
+
+.auth-brand-title {
+    font-size: 32px;
+}
+
+.header-brand-title {
+    font-size: 24px;
+}
+
+.onboarding-brand-title {
+    font-size: 28px;
+}
+
+.auth-header .brand-logo {
+    margin-bottom: 8px;
+}
+
 .auth-header h2 {
     font-size: 32px;
     font-weight: 700;
@@ -698,6 +733,10 @@ header {
 .onboarding-header {
     text-align: center;
     margin-bottom: 32px;
+}
+
+.onboarding-header .brand-logo {
+    margin-bottom: 8px;
 }
 
 .onboarding-header h2 {
