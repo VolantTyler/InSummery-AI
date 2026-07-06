@@ -1,192 +1,80 @@
-import json
-from unittest.mock import MagicMock, patch
+import copy
 import pytest
-from datetime import datetime
 
-class MockRequest:
-    def __init__(self, json_data):
-        self._json_data = json_data
-    def get_json(self):
-        return self._json_data
+from app.matrix_logic import delete_activity
 
-@patch("functions.main.FirestoreStorageProvider")
-def test_delete_activity_series(mock_storage_class):
-    # Setup mocks
-    mock_storage = MagicMock()
-    mock_storage_class.return_value = mock_storage
-    
-    initial_matrix = {
-        "activities": [
-            {
-                "id": "act_1",
-                "child_name": "Emily",
-                "activity_title": "Soccer Camp",
-                "start_date": "2026-07-06",
-                "end_date": "2026-07-10",
-                "start_time": "09:00",
-                "end_time": "12:00",
-                "status": "ACTIVE",
-                "google_event_id": "g_123"
-            }
-        ],
-        "gaps": []
+
+def _make_matrix(**overrides):
+    act = {
+        "id": "act_1",
+        "child_name": "Emily",
+        "activity_title": "Soccer Camp",
+        "start_date": "2026-07-06",
+        "end_date": "2026-07-10",
+        "start_time": "09:00",
+        "end_time": "12:00",
+        "status": "ACTIVE",
     }
-    mock_storage.get_profile.return_value = {
-        "children": [{"name": "Emily"}]
-    }
-    mock_storage.get_matrix.return_value = initial_matrix
+    act.update(overrides)
+    return {"activities": [act], "gaps": []}
 
-    from functions.main import handle_delete_activity
 
-    req = MockRequest({
-        "activity_id": "act_1",
-        "delete_type": "series"
-    })
-    
-    response = handle_delete_activity(req, "user_1", {})
-    assert response.status_code == 200
-    
-    data = json.loads(response.data)
-    assert data["status"] == "SUCCESS"
-    assert len(data["matrix"]["activities"]) == 0
-    assert "g_123" in data["matrix"]["deleted_google_event_ids"]
-    mock_storage.save_matrix.assert_called_once()
+def test_delete_activity_series():
+    matrix = _make_matrix(google_event_id="g_123")
+    result = delete_activity(matrix, "act_1", "series")
 
-@patch("functions.main.FirestoreStorageProvider")
-def test_delete_activity_single_edge_start(mock_storage_class):
-    mock_storage = MagicMock()
-    mock_storage_class.return_value = mock_storage
-    
-    initial_matrix = {
-        "activities": [
-            {
-                "id": "act_1",
-                "child_name": "Emily",
-                "activity_title": "Soccer Camp",
-                "start_date": "2026-07-06",
-                "end_date": "2026-07-10",
-                "start_time": "09:00",
-                "end_time": "12:00",
-                "status": "ACTIVE"
-            }
-        ],
-        "gaps": []
-    }
-    mock_storage.get_profile.return_value = {
-        "children": [{"name": "Emily"}]
-    }
-    mock_storage.get_matrix.return_value = initial_matrix
+    assert len(result["activities"]) == 0
+    assert "g_123" in result["deleted_google_event_ids"]
 
-    from functions.main import handle_delete_activity
 
-    req = MockRequest({
-        "activity_id": "act_1",
-        "delete_type": "single",
-        "date": "2026-07-06"
-    })
-    
-    response = handle_delete_activity(req, "user_1", {})
-    assert response.status_code == 200
-    
-    data = json.loads(response.data)
-    assert data["status"] == "SUCCESS"
-    activities = data["matrix"]["activities"]
-    assert len(activities) == 1
-    assert activities[0]["start_date"] == "2026-07-07"
-    assert activities[0]["end_date"] == "2026-07-10"
+def test_delete_activity_single_edge_start():
+    matrix = _make_matrix()
+    result = delete_activity(matrix, "act_1", "single", "2026-07-06")
 
-@patch("functions.main.FirestoreStorageProvider")
-def test_delete_activity_single_edge_end(mock_storage_class):
-    mock_storage = MagicMock()
-    mock_storage_class.return_value = mock_storage
-    
-    initial_matrix = {
-        "activities": [
-            {
-                "id": "act_1",
-                "child_name": "Emily",
-                "activity_title": "Soccer Camp",
-                "start_date": "2026-07-06",
-                "end_date": "2026-07-10",
-                "start_time": "09:00",
-                "end_time": "12:00",
-                "status": "ACTIVE"
-            }
-        ],
-        "gaps": []
-    }
-    mock_storage.get_profile.return_value = {
-        "children": [{"name": "Emily"}]
-    }
-    mock_storage.get_matrix.return_value = initial_matrix
+    assert len(result["activities"]) == 1
+    assert result["activities"][0]["start_date"] == "2026-07-07"
+    assert result["activities"][0]["end_date"] == "2026-07-10"
 
-    from functions.main import handle_delete_activity
 
-    req = MockRequest({
-        "activity_id": "act_1",
-        "delete_type": "single",
-        "date": "2026-07-10"
-    })
-    
-    response = handle_delete_activity(req, "user_1", {})
-    assert response.status_code == 200
-    
-    data = json.loads(response.data)
-    assert data["status"] == "SUCCESS"
-    activities = data["matrix"]["activities"]
-    assert len(activities) == 1
-    assert activities[0]["start_date"] == "2026-07-06"
-    assert activities[0]["end_date"] == "2026-07-09"
+def test_delete_activity_single_edge_end():
+    matrix = _make_matrix()
+    result = delete_activity(matrix, "act_1", "single", "2026-07-10")
 
-@patch("functions.main.FirestoreStorageProvider")
-def test_delete_activity_single_split(mock_storage_class):
-    mock_storage = MagicMock()
-    mock_storage_class.return_value = mock_storage
-    
-    initial_matrix = {
-        "activities": [
-            {
-                "id": "act_1",
-                "child_name": "Emily",
-                "activity_title": "Soccer Camp",
-                "start_date": "2026-07-06",
-                "end_date": "2026-07-10",
-                "start_time": "09:00",
-                "end_time": "12:00",
-                "status": "ACTIVE",
-                "google_event_id": "g_123"
-            }
-        ],
-        "gaps": []
-    }
-    mock_storage.get_profile.return_value = {
-        "children": [{"name": "Emily"}]
-    }
-    mock_storage.get_matrix.return_value = initial_matrix
+    assert len(result["activities"]) == 1
+    assert result["activities"][0]["start_date"] == "2026-07-06"
+    assert result["activities"][0]["end_date"] == "2026-07-09"
 
-    from functions.main import handle_delete_activity
 
-    req = MockRequest({
-        "activity_id": "act_1",
-        "delete_type": "single",
-        "date": "2026-07-08"
-    })
-    
-    response = handle_delete_activity(req, "user_1", {})
-    assert response.status_code == 200
-    
-    data = json.loads(response.data)
-    assert data["status"] == "SUCCESS"
-    
-    activities = data["matrix"]["activities"]
+def test_delete_activity_single_split():
+    matrix = _make_matrix(google_event_id="g_123")
+    result = delete_activity(matrix, "act_1", "single", "2026-07-08")
+
+    activities = result["activities"]
     assert len(activities) == 2
-    
+
+    # Part 1 keeps the original ID and google_event_id
     assert activities[0]["id"] == "act_1"
     assert activities[0]["start_date"] == "2026-07-06"
     assert activities[0]["end_date"] == "2026-07-07"
     assert activities[0]["google_event_id"] == "g_123"
-    
+
+    # Part 2 gets a new ID and no google_event_id
     assert activities[1]["id"] != "act_1"
     assert activities[1]["start_date"] == "2026-07-09"
     assert activities[1]["end_date"] == "2026-07-10"
     assert "google_event_id" not in activities[1]
+
+
+def test_delete_activity_not_found():
+    matrix = _make_matrix()
+    with pytest.raises(ValueError, match="not found"):
+        delete_activity(matrix, "nonexistent", "series")
+
+
+def test_delete_activity_single_day():
+    """A single-day activity deleted as 'single' should remove it entirely."""
+    matrix = _make_matrix(start_date="2026-07-08", end_date="2026-07-08", google_event_id="g_456")
+    result = delete_activity(matrix, "act_1", "single", "2026-07-08")
+
+    assert len(result["activities"]) == 0
+    assert "g_456" in result["deleted_google_event_ids"]

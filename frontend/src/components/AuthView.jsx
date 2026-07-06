@@ -32,10 +32,12 @@ export default function AuthView() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState(null);
+    const [loading, setLoading] = useState(false);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError(null);
+        setLoading(true);
         try {
             if (isSignUpMode) {
                 await authSignUp(auth, email, password);
@@ -44,16 +46,19 @@ export default function AuthView() {
             }
         } catch (err) {
             setError(friendlyAuthError(err));
+            setLoading(false);
         }
     };
 
     const handleGoogle = async () => {
         setError(null);
+        setLoading(true);
         const provider = new GoogleAuthProvider();
         try {
             await authSignInPopup(auth, provider);
         } catch (err) {
             setError(friendlyAuthError(err));
+            setLoading(false);
         }
     };
 
@@ -87,6 +92,7 @@ export default function AuthView() {
                             placeholder="you@example.com"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
+                            disabled={loading}
                         />
                     </div>
                     <div className="form-group">
@@ -98,12 +104,15 @@ export default function AuthView() {
                             placeholder="••••••••"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
+                            disabled={loading}
                         />
                     </div>
                     <button
                         type="submit"
                         className={`btn btn-block ${isSignUpMode ? "btn-primary" : "btn-signin"}`}
+                        disabled={loading}
                     >
+                        {loading && <span className="spinner"></span>}
                         {isSignUpMode ? "Sign Up" : "Sign In"}
                     </button>
                 </form>
@@ -112,15 +121,15 @@ export default function AuthView() {
                     <span>or</span>
                 </div>
 
-                <button className="btn btn-outline btn-block" onClick={handleGoogle}>
-                    <GoogleIcon />
+                <button className="btn btn-outline btn-block" onClick={handleGoogle} disabled={loading}>
+                    {loading ? <span className="spinner spinner-dark"></span> : <GoogleIcon />}
                     {isSignUpMode ? "Sign up with Google" : "Sign in with Google"}
                 </button>
 
                 <div className="auth-footer">
                     <p>
                         {isSignUpMode ? "Already have an account?" : "Don't have an account?"}{" "}
-                        <a href="#" onClick={switchMode}>
+                        <a href="#" onClick={loading ? undefined : switchMode}>
                             {isSignUpMode ? "Sign In" : "Sign Up"}
                         </a>
                     </p>
