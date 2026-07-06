@@ -1,14 +1,15 @@
-import { API_URL } from "./firebase.js";
+import { API_URL, DIRECT_API_URL } from "./firebase.js";
 
 export async function apiFetch(token, endpoint, options = {}) {
+    const { baseUrl = API_URL, ...fetchOptions } = options;
     const headers = {
         "Authorization": `Bearer ${token}`,
         "Content-Type": "application/json",
-        ...(options.headers || {})
+        ...(fetchOptions.headers || {})
     };
 
-    const response = await fetch(`${API_URL}/${endpoint}`, {
-        ...options,
+    const response = await fetch(`${baseUrl}/${endpoint}`, {
+        ...fetchOptions,
         headers
     });
 

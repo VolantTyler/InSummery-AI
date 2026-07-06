@@ -27,6 +27,16 @@ export { GoogleAuthProvider };
 export const API_URL =
     import.meta.env.VITE_API_URL || "http://127.0.0.1:5001/insummery-ai/us-central1/api";
 
+// Firebase Hosting's `/api/**` rewrite hard-caps proxied requests at 60s no
+// matter how the Cloud Function itself is configured (see
+// https://firebase.google.com/docs/hosting/functions#direct-requests-to-function).
+// The email-processing workflow chains several LLM calls and can exceed that
+// on a cold instance, which Hosting surfaces to the browser as a 503. Slow
+// endpoints call the function's direct Cloud Functions URL instead, which
+// has no such proxy timeout. Defaults to API_URL so local/emulator dev
+// (which has no 60s cap) needs no extra configuration.
+export const DIRECT_API_URL = import.meta.env.VITE_DIRECT_API_URL || API_URL;
+
 // Check if we should use mock auth (if API key is mock-api-key or invalid)
 const useMockAuth = firebaseConfig.apiKey === "mock-api-key";
 

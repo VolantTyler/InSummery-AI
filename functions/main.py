@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Dict, Any, List
 from flask import jsonify
 
-from firebase_functions import https_fn
+from firebase_functions import https_fn, options
 from firebase_admin import initialize_app, firestore, auth
 
 # Initialize telemetry BEFORE importing anything that uses the GenAI Client,
@@ -85,7 +85,15 @@ def deserialize_session_events(events_data: List[Dict[str, Any]]) -> List[Any]:
         deserialized.append(Event(**event_dict))
     return deserialized
 
-@https_fn.on_request()
+# /process-email and /resume-workflow run a multi-step agentic workflow
+# (PII masking -> triage -> interpretation -> gap analysis), each step a
+# separate LLM call. On a cold instance this routinely exceeds the 60s
+# default Cloud Functions timeout, which the platform surfaces to callers
+# as a 503. Raise the timeout/memory well past worst-case workflow latency;
+# note Firebase Hosting's `/api/**` rewrite still hard-caps proxied requests
+# at 60s regardless of this setting, so slow endpoints must be called via
+# the function's direct URL (see frontend/src/firebase.js DIRECT_API_URL).
+@https_fn.on_request(timeout_sec=300, memory=options.MemoryOption.GB_1)
 def api(req: https_fn.Request) -> https_fn.Response:
     """Main API router for Firebase Cloud Functions."""
     try:
