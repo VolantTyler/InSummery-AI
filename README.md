@@ -146,6 +146,60 @@ project-console setting.
 
 ---
 
+## Google Calendar OAuth Secrets (Production)
+
+The `api` Cloud Function declares two secrets in its decorator
+(`functions/main.py`): `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. These
+live in **Google Cloud Secret Manager** — Firebase functions secrets *are*
+Secret Manager secrets; `firebase functions:secrets:set` is just a wrapper
+that writes a new secret version there.
+
+### One-time setup
+
+1. Create the secrets (as a project owner/editor):
+   ```bash
+   firebase functions:secrets:set GOOGLE_CLIENT_ID --project in-summery
+   firebase functions:secrets:set GOOGLE_CLIENT_SECRET --project in-summery
+   ```
+   Verify they exist in the **`in-summery`** project (not another project —
+   the 403 deploy error also fires when the secret simply isn't there):
+   ```bash
+   gcloud secrets list --project=in-summery
+   ```
+
+2. Grant the **CI deploy service account** access to the secrets. During
+   `firebase deploy`, the CLI resolves the `latest` secret version and grants
+   the function's runtime service account access to it — both require Secret
+   Manager permissions on the deploying identity. The deploy service account
+   is the `client_email` inside the JSON stored in the
+   `FIREBASE_SERVICE_ACCOUNT_KEY` GitHub Actions secret. Grant it
+   `roles/secretmanager.admin` scoped to just these two secrets:
+   ```bash
+   DEPLOY_SA="<client_email from FIREBASE_SERVICE_ACCOUNT_KEY>"
+   for s in GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET; do
+     gcloud secrets add-iam-policy-binding "$s" \
+       --project=in-summery \
+       --member="serviceAccount:${DEPLOY_SA}" \
+       --role="roles/secretmanager.admin"
+   done
+   ```
+   Without this, deploys fail with
+   `Permission 'secretmanager.versions.get' denied on resource (or it may not exist)`.
+
+3. Deploy. The CLI automatically grants the function's runtime service
+   account `roles/secretmanager.secretAccessor` on the secrets, and the
+   values are exposed to the function as environment variables at runtime.
+
+### Rotating a secret
+
+Set a new version, then redeploy functions so they pick it up:
+```bash
+firebase functions:secrets:set GOOGLE_CLIENT_ID --project in-summery
+firebase deploy --only functions --project in-summery
+```
+
+---
+
 ## Running Unit Tests
 
 Run the pytest suite to verify all logic (matrix merging, gap analysis, PII masking):
