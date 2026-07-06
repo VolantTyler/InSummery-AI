@@ -48,11 +48,15 @@ function buildTimelineItems(child, dateStr, dateObj, activities, gaps, baselines
     activities.forEach(act => {
         if (act.child_name === child && act.start_date <= dateStr && dateStr <= act.end_date) {
             items.push({
+                id: act.id,
+                start_date: act.start_date,
+                end_date: act.end_date,
                 start_time: act.start_time,
                 end_time: act.end_time,
                 title: act.activity_title,
                 className: act.status === "ACTIVE" ? "status-active" : "status-disrupted",
-                notes: act.notes || ""
+                notes: act.notes || "",
+                type: "activity"
             });
         }
     });
@@ -74,7 +78,7 @@ function buildTimelineItems(child, dateStr, dateObj, activities, gaps, baselines
     return items;
 }
 
-export default function MatrixGrid({ matrix, profile }) {
+export default function MatrixGrid({ matrix, profile, onActivityClick }) {
     const activities = matrix.activities || [];
     const gaps = matrix.gaps || [];
 
@@ -117,13 +121,20 @@ export default function MatrixGrid({ matrix, profile }) {
                                     <div className="child-column" key={child}>
                                         <div className="child-name">{child}</div>
                                         {items.length > 0 ? (
-                                            items.map((item, idx) => (
-                                                <div className={`timeline-item ${item.className}`} key={idx}>
-                                                    <div className="item-time">{item.start_time} - {item.end_time}</div>
-                                                    <div className="item-title">{item.title}</div>
-                                                    {item.notes && <div className="item-notes">{item.notes}</div>}
-                                                </div>
-                                            ))
+                                            items.map((item, idx) => {
+                                                const isActivity = item.type === "activity";
+                                                return (
+                                                    <div 
+                                                        className={`timeline-item ${item.className} ${isActivity ? "interactive-activity" : ""}`} 
+                                                        key={idx}
+                                                        onClick={() => isActivity && onActivityClick && onActivityClick(item.id, dateStr, item.title, item.start_date, item.end_date)}
+                                                    >
+                                                        <div className="item-time">{item.start_time} - {item.end_time}</div>
+                                                        <div className="item-title">{item.title}</div>
+                                                        {item.notes && <div className="item-notes">{item.notes}</div>}
+                                                    </div>
+                                                );
+                                            })
                                         ) : (
                                             <div className="no-alerts" style={{ padding: "20px 0" }}>No activities</div>
                                         )}

@@ -2,7 +2,7 @@ import os
 import json
 import logging
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Any, List
 from flask import jsonify
 
@@ -141,6 +141,8 @@ def _route_request(req: https_fn.Request) -> https_fn.Response:
         return handle_resume_workflow(req, user_id, headers)
     elif (path == "/get-schedule" or path == "/get-matrix") and req.method == "GET":
         return handle_get_schedule(user_id, headers)
+    elif path == "/delete-activity" and req.method == "POST":
+        return handle_delete_activity(req, user_id, headers)
     elif path == "/sync-calendar" and req.method == "POST":
         return handle_sync_calendar(user_id, headers)
     elif path == "/get-profile" and req.method == "GET":
@@ -387,6 +389,17 @@ def handle_sync_calendar(user_id: str, headers: dict) -> https_fn.Response:
     try:
         service = build('calendar', 'v3', credentials=creds)
         
+        # Delete any calendar events that were marked for removal
+        deleted_ids = matrix.get("deleted_google_event_ids", [])
+        if deleted_ids:
+            for event_id in deleted_ids:
+                try:
+                    service.events().delete(calendarId='primary', eventId=event_id).execute()
+                except HttpError as e:
+                    if e.resp.status not in [404, 410]:
+                        logger.error(f"Failed to delete Google Calendar event {event_id}: {e}")
+            matrix["deleted_google_event_ids"] = []
+        
         for act in activities:
             status = act.get("status", "ACTIVE")
             title = act.get("activity_title", "")
@@ -591,4 +604,134 @@ def handle_oauth_callback(req: https_fn.Request, headers: dict) -> https_fn.Resp
             headers=headers,
             mimetype="application/json"
         )
+
+
+def handle_delete_activity(req: https_fn.Request, user_id: str, headers: dict) -> https_fn.Response:
+    import uuid
+    from datetime import datetime, timedelta
+    from app.matrix_logic import parse_date, calculate_gaps
+
+    data = req.get_json() or {}
+    activity_id = data.get("activity_id")
+    delete_type = data.get("delete_type")  # "single" or "series"
+    date_str = data.get("date")  # "YYYY-MM-DD"
+
+    if not activity_id or not delete_type:
+        return https_fn.Response(json.dumps({"error": "Missing activity_id or delete_type"}), status=400, headers=headers, mimetype="application/json")
+
+    storage = FirestoreStorageProvider()
+    profile = storage.get_profile(user_id) or {}
+    matrix = storage.get_matrix(user_id) or {"activities": [], "gaps": []}
+    activities = matrix.get("activities", [])
+
+    # Find the activity
+    activity_idx = -1
+    for i, act in enumerate(activities):
+        if act.get("id") == activity_id:
+            activity_idx = i
+            break
+
+    if activity_idx == -1:
+        return https_fn.Response(json.dumps({"error": f"Activity with ID {activity_id} not found"}), status=404, headers=headers, mimetype="application/json")
+
+    act = activities[activity_idx]
+
+    if delete_type == "series":
+        google_event_id = act.get("google_event_id")
+        if google_event_id:
+            if "deleted_google_event_ids" not in matrix:
+                matrix["deleted_google_event_ids"] = []
+            matrix["deleted_google_event_ids"].append(google_event_id)
+        activities.pop(activity_idx)
+    elif delete_type == "single":
+        if not date_str:
+            return https_fn.Response(json.dumps({"error": "Missing date parameter for single event deletion"}), status=400, headers=headers, mimetype="application/json")
+
+        start_date_str = act.get("start_date")
+        end_date_str = act.get("end_date")
+
+        if not start_date_str or not end_date_str:
+            return https_fn.Response(json.dumps({"error": "Activity start_date or end_date missing"}), status=400, headers=headers, mimetype="application/json")
+
+        if start_date_str == end_date_str:
+            # Single day event: delete the entire activity
+            google_event_id = act.get("google_event_id")
+            if google_event_id:
+                if "deleted_google_event_ids" not in matrix:
+                    matrix["deleted_google_event_ids"] = []
+                matrix["deleted_google_event_ids"].append(google_event_id)
+            activities.pop(activity_idx)
+        elif date_str == start_date_str:
+            # Move start date forward by 1 day
+            try:
+                dt = datetime.strptime(start_date_str, "%Y-%m-%d")
+                new_start_dt = dt + timedelta(days=1)
+                act["start_date"] = new_start_dt.strftime("%Y-%m-%d")
+            except Exception as e:
+                return https_fn.Response(json.dumps({"error": f"Failed parsing/modifying date: {str(e)}"}), status=400, headers=headers, mimetype="application/json")
+        elif date_str == end_date_str:
+            # Move end date backward by 1 day
+            try:
+                dt = datetime.strptime(end_date_str, "%Y-%m-%d")
+                new_end_dt = dt - timedelta(days=1)
+                act["end_date"] = new_end_dt.strftime("%Y-%m-%d")
+            except Exception as e:
+                return https_fn.Response(json.dumps({"error": f"Failed parsing/modifying date: {str(e)}"}), status=400, headers=headers, mimetype="application/json")
+        else:
+            # Split the activity in two parts around date_str
+            try:
+                target_dt = datetime.strptime(date_str, "%Y-%m-%d")
+                
+                # Part 1 end date: date_str - 1 day
+                part1_end = (target_dt - timedelta(days=1)).strftime("%Y-%m-%d")
+                
+                # Part 2 start date: date_str + 1 day
+                part2_start = (target_dt + timedelta(days=1)).strftime("%Y-%m-%d")
+                
+                # Create a new activity (Part 2) using copy before editing part 1
+                new_act = dict(act)
+                new_act["id"] = str(uuid.uuid4())[:8]
+                new_act["start_date"] = part2_start
+                # Clear google_event_id so next sync creates a new event for part 2
+                new_act.pop("google_event_id", None)
+
+                # Update existing activity (Part 1)
+                act["end_date"] = part1_end
+                
+                # Insert right after the original activity
+                activities.insert(activity_idx + 1, new_act)
+            except Exception as e:
+                return https_fn.Response(json.dumps({"error": f"Failed splitting activity: {str(e)}"}), status=400, headers=headers, mimetype="application/json")
+    else:
+        return https_fn.Response(json.dumps({"error": "Invalid delete_type. Must be 'single' or 'series'"}), status=400, headers=headers, mimetype="application/json")
+
+    # Recalculate gaps
+    if activities:
+        active_dates = []
+        for a in activities:
+            if a.get("status") == "ACTIVE":
+                try:
+                    active_dates.append(parse_date(a["start_date"]))
+                    active_dates.append(parse_date(a["end_date"]))
+                except Exception:
+                    pass
+        if active_dates:
+            start_date = min(active_dates)
+            end_date = max(active_dates)
+        else:
+            start_date = datetime.now().date()
+            end_date = start_date + timedelta(weeks=4)
+    else:
+        start_date = datetime.now().date()
+        end_date = start_date + timedelta(weeks=4)
+
+    if (end_date - start_date).days > 90:
+        end_date = start_date + timedelta(days=90)
+
+    gaps = calculate_gaps(activities, profile, start_date, end_date)
+    matrix["activities"] = activities
+    matrix["gaps"] = gaps
+
+    storage.save_matrix(user_id, matrix)
+    return https_fn.Response(json.dumps({"status": "SUCCESS", "matrix": matrix}), status=200, headers=headers, mimetype="application/json")
 

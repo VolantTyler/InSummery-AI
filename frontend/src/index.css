@@ -17,6 +17,7 @@
     --school-text: #475569;
     --signin: #0d9488;
     --signin-hover: #0f766e;
+    --header-bg: #c8e6ff;
     
     --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
     --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
@@ -42,6 +43,7 @@
     --school-text: #cbd5e1;
     --signin: #2dd4bf;
     --signin-hover: #14b8a6;
+    --header-bg: #1e293b;
 }
 
 * {
@@ -116,6 +118,45 @@ body {
 
 .btn-outline:hover {
     background-color: var(--border-color);
+}
+
+.btn-danger {
+    background-color: var(--danger-text);
+    color: #ffffff;
+    border-color: var(--danger-text);
+}
+
+.btn-danger:hover {
+    background-color: #a51b1b;
+}
+
+.btn-outline-danger {
+    background-color: transparent;
+    color: var(--danger-text);
+    border-color: var(--danger-text);
+}
+
+.btn-outline-danger:hover {
+    background-color: var(--danger-bg);
+}
+
+[data-theme="dark"] .btn-danger {
+    background-color: #ef4444;
+    color: #0f172a;
+    border-color: #ef4444;
+}
+
+[data-theme="dark"] .btn-danger:hover {
+    background-color: #f87171;
+}
+
+[data-theme="dark"] .btn-outline-danger {
+    color: #f87171;
+    border-color: #f87171;
+}
+
+[data-theme="dark"] .btn-outline-danger:hover {
+    background-color: rgba(239, 68, 68, 0.1);
 }
 
 .btn-block {
@@ -301,7 +342,7 @@ header {
     justify-content: space-between;
     align-items: center;
     padding: 16px 32px;
-    background-color: var(--card-bg);
+    background-color: var(--header-bg);
     border-bottom: 1px solid var(--border-color);
     box-shadow: var(--shadow-sm);
     z-index: 10;
@@ -590,6 +631,17 @@ header {
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
+.timeline-item.interactive-activity {
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
+}
+
+.timeline-item.interactive-activity:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+    opacity: 0.95;
+}
+
 .item-time {
     font-size: 12px;
     font-weight: 700;
@@ -819,6 +871,14 @@ header {
 /* Profile Modal overrides */
 .profile-modal-card {
     max-width: 685px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.profile-modal-card .modal-body {
+    overflow-y: auto;
+    flex: 1;
 }
 
 .modal-header {
@@ -1117,6 +1177,27 @@ header {
     .content-area {
         padding: 24px 20px;
     }
+}
+
+/* Spinner Styles */
+.spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: #ffffff;
+    animation: spin 0.8s linear infinite;
+    margin-right: 8px;
+}
+
+.spinner-dark {
+    border-color: rgba(0, 0, 0, 0.15);
+    border-top-color: var(--primary);
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
 }
 
 
