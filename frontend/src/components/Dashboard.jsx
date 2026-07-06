@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { auth, authSignOut } from "../firebase.js";
+import { auth, authSignOut, DIRECT_API_URL } from "../firebase.js";
 import { apiFetch } from "../api.js";
 import BrandLogo from "./BrandLogo.jsx";
 import MatrixGrid from "./MatrixGrid.jsx";
@@ -38,9 +38,12 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
         setSubmitting(true);
 
         try {
+            // Bypasses Firebase Hosting's /api rewrite (hard 60s proxy
+            // timeout) since the multi-step LLM workflow can run longer.
             const res = await apiFetch(token, "process-email", {
                 method: "POST",
-                body: JSON.stringify({ text, isDisruption })
+                body: JSON.stringify({ text, isDisruption }),
+                baseUrl: DIRECT_API_URL
             });
 
             if (res.status === "INTERRUPTED") {
@@ -66,7 +69,8 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
         try {
             const res = await apiFetch(token, "resume-workflow", {
                 method: "POST",
-                body: JSON.stringify({ workflowId, response: responseText })
+                body: JSON.stringify({ workflowId, response: responseText }),
+                baseUrl: DIRECT_API_URL
             });
 
             if (res.status === "INTERRUPTED") {
