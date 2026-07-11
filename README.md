@@ -146,6 +146,31 @@ project-console setting.
 
 ---
 
+
+## Optional Weave Observability
+
+InSummery can send masked agent traces and summarized eval results to
+Weights & Biases Weave. Keep Weave credentials server-side only; do not add
+these values to `frontend/.env*` files.
+
+For local CLI and eval runs, copy `.env.example` to `.env` and set:
+
+```bash
+WANDB_API_KEY=your_wandb_api_key
+WEAVE_PROJECT=your-wandb-entity/insummery-ai
+WEAVE_DISABLED=false
+```
+
+`WANDB_API_KEY` is optional. When it is absent, or when
+`WEAVE_DISABLED=true`, the app skips Weave initialization and runs normally.
+When enabled, Weave is initialized with PII redaction and the application only
+records masked agent inputs plus summarized workflow/evaluation metadata. The
+existing `PIIMasker` remains the primary privacy boundary before LLM calls. For
+deployed Firebase Cloud Functions, configure `WANDB_API_KEY` and `WEAVE_PROJECT`
+as backend secrets/environment variables rather than frontend build variables.
+
+---
+
 ## Running Unit Tests
 
 Run the pytest suite to verify all logic (matrix merging, gap analysis, PII masking):

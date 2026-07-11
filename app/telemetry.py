@@ -30,6 +30,11 @@ def setup_telemetry():
     This function should be called at the very beginning of the application startup,
     before any GenAI Client instances are created.
     """
+
+    from app.weave_observability import setup_weave
+
+    setup_weave()
+
     # 1. Initialize the Tracer Provider
     provider = TracerProvider()
     

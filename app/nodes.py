@@ -15,6 +15,7 @@ from app.pii_masker import PIIMasker
 from app.storage import LocalStorageProvider, FirestoreStorageProvider
 from app.schemas import InterpretationResult, DisruptionDetail
 from app.matrix_logic import calculate_gaps, merge_activities, apply_disruption, parse_date
+from app.weave_observability import trace_agent_call, trace_confidence_gate, trace_pii_mask
 
 def _get_storage_provider(ctx: Context) -> Any:
     mode = ctx.state.get("mode", "local")
@@ -47,6 +48,7 @@ async def pii_mask_node(ctx: Context, node_input: str) -> str:
     ctx.state["pii_mappings"] = masker.mask_to_original
     ctx.state["original_text"] = node_input
     ctx.state["masked_text"] = masked_text
+    await trace_pii_mask(masked_text, len(masker.mask_to_original))
     
     return masked_text
 
@@ -56,6 +58,7 @@ async def triager_node(ctx: Context, node_input: str) -> str:
     agent = build_triager_agent()
     
     res = await ctx.run_node(agent, node_input)
+    await trace_agent_call("triager_agent", node_input, res)
     category = res.strip().lower()
     if category not in ["registration", "disruption", "general"]:
         category = "general"
@@ -74,6 +77,7 @@ async def interpreter_registration_node(ctx: Context, node_input: str) -> Any:
     # text back from state so extraction always sees the real content.
     masked_text = ctx.state.get("masked_text") or node_input
     res = await ctx.run_node(agent, masked_text)
+    await trace_agent_call("interpreter_agent_registration", masked_text, res)
     return res
 
 def _build_masked_schedule_context(ctx: Context) -> str:
@@ -123,6 +127,7 @@ async def interpreter_disruption_node(ctx: Context, node_input: str) -> Any:
     # text from state rather than the upstream triager node's return value.
     masked_text = ctx.state.get("masked_text") or node_input
     res = await ctx.run_node(agent, masked_text)
+    await trace_agent_call("interpreter_agent_disruption", masked_text, res)
     return res
 
 async def confidence_gate_node(ctx: Context, node_input: Any) -> str:
@@ -132,6 +137,7 @@ async def confidence_gate_node(ctx: Context, node_input: Any) -> str:
         # Disruptions and general inquiries bypass the confidence gate
         ctx.state["extraction_result"] = node_input
         ctx.route = "CONFIDENCE_HIGH"
+        await trace_confidence_gate(category, 100, "CONFIDENCE_HIGH")
         return "CONFIDENCE_HIGH"
         
     score = 100
@@ -144,6 +150,7 @@ async def confidence_gate_node(ctx: Context, node_input: Any) -> str:
     
     if score >= 80:
         ctx.route = "CONFIDENCE_HIGH"
+        await trace_confidence_gate(category, score, "CONFIDENCE_HIGH")
         return "CONFIDENCE_HIGH"
     else:
         if isinstance(node_input, InterpretationResult):
@@ -158,6 +165,7 @@ async def confidence_gate_node(ctx: Context, node_input: Any) -> str:
             f"Please clarify the schedule details."
         )
         ctx.route = "CONFIDENCE_LOW"
+        await trace_confidence_gate(category, score, "CONFIDENCE_LOW")
         return "CONFIDENCE_LOW"
 
 @node(rerun_on_resume=True)
@@ -181,6 +189,7 @@ async def hitl_node(ctx: Context, node_input: Any) -> Any:
         
         agent = build_interpreter_hitl_agent()
         res = await ctx.run_node(agent, masked_combined)
+        await trace_agent_call("interpreter_agent_hitl", masked_combined, res)
         # Overwrite the low-confidence extraction saved by confidence_gate_node,
         # otherwise matrix_analyzer_node would reuse the stale pre-clarification
         # result from state and discard the clarified one.

@@ -39,6 +39,7 @@ from app.evaluation.scoring import (
     pick_best_activity,
     aggregate,
 )
+from app.weave_observability import trace_eval_case
 from app.evaluation.workflow import WorkflowInvoker, adk_workflow_invoker
 
 AgentInvoker = Callable[[Any, str], Awaitable[str]]
@@ -143,12 +144,19 @@ class EvalHarness:
             if predicted not in ("registration", "disruption", "general"):
                 predicted = "general"
             score = score_triager_case(case["expected_category"], predicted)
-            results.append({
+            result = {
                 "id": case["id"],
                 "expected": case["expected_category"],
                 "predicted": predicted,
                 "score": score,
-            })
+            }
+            trace_eval_case(
+                "triager",
+                case["id"],
+                score,
+                {"expected": case["expected_category"], "predicted": predicted},
+            )
+            results.append(result)
         return {
             "accuracy": aggregate([r["score"] for r in results]),
             "cases": results,
@@ -186,14 +194,25 @@ class EvalHarness:
             else:
                 scored = score_registration_activity(expected, best)
 
-            results.append({
+            result = {
                 "id": expected["id"],
                 "score": scored["score"],
                 "field_scores": scored["field_scores"],
                 "confidence_score": parsed.confidence_score,
                 "passes_confidence_gate": parsed.confidence_score >= CONFIDENCE_GATE,
                 "extracted_activities": len(activities),
-            })
+            }
+            trace_eval_case(
+                "registration",
+                expected["id"],
+                scored["score"],
+                {
+                    "confidence_score": parsed.confidence_score,
+                    "passes_confidence_gate": parsed.confidence_score >= CONFIDENCE_GATE,
+                    "extracted_activities": len(activities),
+                },
+            )
+            results.append(result)
 
         return {
             "field_score": aggregate([r["score"] for r in results]),
@@ -221,11 +240,13 @@ class EvalHarness:
             predicted["description"] = masker.unmask(predicted.get("description") or "")
 
             scored = score_disruption(case["expected"], predicted)
-            results.append({
+            result = {
                 "id": case["id"],
                 "score": scored["score"],
                 "field_scores": scored["field_scores"],
-            })
+            }
+            trace_eval_case("disruption", case["id"], scored["score"])
+            results.append(result)
         return {
             "field_score": aggregate([r["score"] for r in results]),
             "cases": results,
@@ -268,6 +289,12 @@ class EvalHarness:
                     "error": outcome.get("error"),
                     "message": outcome.get("message"),
                 })
+                trace_eval_case(
+                    "workflow",
+                    expected["id"],
+                    0.0,
+                    {"status": outcome["status"], "passed": False},
+                )
                 results.append(row)
                 continue
 
@@ -296,6 +323,18 @@ class EvalHarness:
                 "confidence_score": confidence,
                 "extracted_activities": len(outcome.get("activities") or []),
             })
+            trace_eval_case(
+                "workflow",
+                expected["id"],
+                scored["score"],
+                {
+                    "status": outcome["status"],
+                    "passed": passed,
+                    "category": outcome.get("category"),
+                    "confidence_score": confidence,
+                    "extracted_activities": len(outcome.get("activities") or []),
+                },
+            )
             results.append(row)
 
         return {

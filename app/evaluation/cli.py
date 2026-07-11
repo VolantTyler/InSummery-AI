@@ -11,6 +11,13 @@ import asyncio
 import json
 import sys
 
+from dotenv import load_dotenv
+
+from app.telemetry import setup_telemetry
+
+load_dotenv()
+setup_telemetry()
+
 from app.evaluation.runner import EvalHarness, SUITES
 from app.evaluation.baseline import (
     is_gemini_model,

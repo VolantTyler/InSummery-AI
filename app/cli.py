@@ -11,6 +11,9 @@ from dotenv import load_dotenv
 # the CLI is invoked from (e.g. `insummery` console script vs `python bin/insummery`).
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
 
+from app.telemetry import setup_telemetry
+setup_telemetry()
+
 from google.adk import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.events import RequestInput
