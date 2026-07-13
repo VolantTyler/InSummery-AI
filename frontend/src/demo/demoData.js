@@ -166,6 +166,7 @@ export const DEMO_SAMPLE_EMAILS = [
 Date: Wed, 24 Jun 2026 10:22:41 -0400
 From: camps@cedar-grove.org
 To: jordan.okonkwo@example.com
+X-InSummery-Demo: complete
 
 Dear Jordan and Avery,
 
@@ -176,7 +177,7 @@ REGISTRATION SUMMARY
 ---------------------------------------------------------
 Child: Sage Okonkwo-Chen
 Program: Little Explorers Day Camp (Ages 5–7)
-Dates: Monday, August 10, 2026 to Friday, August 14, 2026
+Dates: Monday, July 20, 2026 to Friday, July 24, 2026
 Times: 9:00 AM – 12:00 PM daily
 Location: Cedar Grove Conservancy, Willow Classroom
 Address: 220 Conservancy Road, Harborview
@@ -204,6 +205,7 @@ Cedar Grove Summer Programs
 Date: Thu, 25 Jun 2026 16:05:12 -0400
 From: registrar@harboru.edu
 To: avery.chen@example.com
+X-InSummery-Demo: incomplete
 
 Hi Avery,
 
@@ -214,7 +216,7 @@ BOOKING DETAILS
 =========================================
 Attendee: Kai Okonkwo-Chen
 Program: Youth Leadership Summit (Ages 11–14)
-Start Date: Monday, August 10, 2026
+Start Date: Monday, July 20, 2026
 Start Time: 9:00 AM
 Location: Harbor University Student Center, Room 210
 Address: 1 University Way, Harborview
@@ -234,8 +236,8 @@ registrar@harboru.edu
 export const DEMO_SAGE_ACTIVITY = {
     child_name: "Sage",
     activity_title: "Little Explorers Day Camp",
-    start_date: "2026-08-10",
-    end_date: "2026-08-14",
+    start_date: "2026-07-20",
+    end_date: "2026-07-24",
     start_time: "09:00",
     end_time: "12:00",
     location: "Cedar Grove Conservancy, Willow Classroom",
@@ -246,11 +248,11 @@ export const DEMO_SAGE_ACTIVITY = {
 export const DEMO_KAI_PARTIAL = {
     child_name: "Kai",
     activity_title: "Youth Leadership Summit",
-    start_date: "2026-08-10",
+    start_date: "2026-07-20",
     start_time: "09:00",
     location: "Harbor University Student Center, Room 210",
     notes: "Campus program; packing list available on the university portal.",
 };
 
 export const DEMO_HITL_QUESTION =
-    "I found Kai’s Youth Leadership Summit starting Monday, August 10, 2026 at 9:00 AM, but the registration email is missing the end date and end time. What is the end date and end time for this program?";
+    "I found Kai’s Youth Leadership Summit starting Monday, July 20, 2026 at 9:00 AM, but the registration email is missing the end date and end time. What is the end date and end time for this program?";

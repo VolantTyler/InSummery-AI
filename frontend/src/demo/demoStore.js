@@ -35,7 +35,11 @@ function shortId() {
     return `demo-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-/** Compact gap calc: only weekdays touched by an activity; skip full-day blanks for idle kids. */
+function cloneMatrix(matrix) {
+    return JSON.parse(JSON.stringify(matrix));
+}
+
+/** Compact gap calc: absolute leftovers only for kids who have coverage that day. */
 export function recalculateGaps(activities, profile = DEMO_PROFILE) {
     const children = (profile.children || []).map((c) => c.name).filter(Boolean);
     const active = (activities || []).filter((a) => a.status === "ACTIVE");
@@ -119,36 +123,59 @@ export function buildSeedMatrix() {
     };
 }
 
-export function loadDemoMatrix() {
+/**
+ * In-memory guest database for demo mode.
+ * localStorage is a persistence mirror only — React always reads from memory
+ * so ingestions immediately produce schedule blocks in the UI.
+ */
+let memoryMatrix = null;
+const pendingHitl = new Map();
+
+function ensureMemory() {
+    if (memoryMatrix) return memoryMatrix;
     try {
         const raw = localStorage.getItem(DEMO_MATRIX_KEY);
-        if (raw) return JSON.parse(raw);
+        if (raw) {
+            memoryMatrix = JSON.parse(raw);
+            return memoryMatrix;
+        }
     } catch {
         /* fall through */
     }
-    const seed = buildSeedMatrix();
-    saveDemoMatrix(seed);
-    return seed;
+    memoryMatrix = buildSeedMatrix();
+    persist();
+    return memoryMatrix;
+}
+
+function persist() {
+    if (!memoryMatrix) return;
+    localStorage.setItem(DEMO_MATRIX_KEY, JSON.stringify(memoryMatrix));
+}
+
+export function loadDemoMatrix() {
+    return cloneMatrix(ensureMemory());
 }
 
 export function saveDemoMatrix(matrix) {
-    localStorage.setItem(DEMO_MATRIX_KEY, JSON.stringify(matrix));
+    memoryMatrix = cloneMatrix(matrix);
+    persist();
+    return loadDemoMatrix();
 }
 
 export function resetDemoMatrix() {
-    const empty = {
+    memoryMatrix = {
         activities: [],
         gaps: [],
         warnings: [],
     };
-    saveDemoMatrix(empty);
-    return empty;
+    persist();
+    return loadDemoMatrix();
 }
 
 export function restoreSeedDemoMatrix() {
-    const seed = buildSeedMatrix();
-    saveDemoMatrix(seed);
-    return seed;
+    memoryMatrix = buildSeedMatrix();
+    persist();
+    return loadDemoMatrix();
 }
 
 function normalizeText(text) {
@@ -156,31 +183,38 @@ function normalizeText(text) {
 }
 
 function detectSampleEmail(text) {
-    const normalized = normalizeText(text);
-    const complete = DEMO_SAMPLE_EMAILS.find((e) => e.id === "complete");
-    const incomplete = DEMO_SAMPLE_EMAILS.find((e) => e.id === "incomplete");
+    const raw = text || "";
+    const normalized = normalizeText(raw);
+
+    // Prefer explicit demo markers embedded in sample emails
+    const marker = raw.match(/X-InSummery-Demo:\s*(complete|incomplete)/i);
+    if (marker) {
+        const id = marker[1].toLowerCase();
+        return DEMO_SAMPLE_EMAILS.find((e) => e.id === id) || null;
+    }
 
     if (
         normalized.includes("little explorers day camp") &&
         normalized.includes("sage") &&
-        normalized.includes("august 14")
+        (normalized.includes("july 24") || normalized.includes("august 14"))
     ) {
-        return complete;
+        return DEMO_SAMPLE_EMAILS.find((e) => e.id === "complete");
     }
+
     if (
         normalized.includes("youth leadership summit") &&
         normalized.includes("kai") &&
-        !normalized.includes("end date") &&
-        !normalized.includes("august 14, 2026")
+        !normalized.includes("end date:") &&
+        !normalized.includes("end time:")
     ) {
-        return incomplete;
+        return DEMO_SAMPLE_EMAILS.find((e) => e.id === "incomplete");
     }
-    if (normalized.includes(normalizeText(complete.text).slice(0, 80))) return complete;
-    if (normalized.includes(normalizeText(incomplete.text).slice(0, 80))) return incomplete;
+
     return null;
 }
 
-function mergeActivity(matrix, activity) {
+function mergeActivity(activity) {
+    const matrix = ensureMemory();
     const activities = [...(matrix.activities || [])];
     const duplicate = activities.some(
         (act) =>
@@ -191,6 +225,7 @@ function mergeActivity(matrix, activity) {
             act.start_time === activity.start_time &&
             act.end_time === activity.end_time
     );
+
     if (!duplicate) {
         activities.push({
             ...activity,
@@ -198,24 +233,29 @@ function mergeActivity(matrix, activity) {
             status: "ACTIVE",
         });
     }
-    const next = {
+
+    memoryMatrix = {
         activities,
         gaps: recalculateGaps(activities),
         warnings: matrix.warnings || [],
     };
-    saveDemoMatrix(next);
-    return next;
+    persist();
+    return loadDemoMatrix();
 }
 
-const pendingHitl = new Map();
-
 export async function demoProcessEmail(text) {
-    await delay(700);
+    await delay(600);
+    ensureMemory();
     const sample = detectSampleEmail(text);
 
     if (sample?.id === "complete") {
-        const matrix = mergeActivity(loadDemoMatrix(), DEMO_SAGE_ACTIVITY);
-        return { status: "COMPLETED", matrix, confidence: 92 };
+        const matrix = mergeActivity(DEMO_SAGE_ACTIVITY);
+        return {
+            status: "COMPLETED",
+            matrix,
+            confidence: 92,
+            addedActivity: DEMO_SAGE_ACTIVITY,
+        };
     }
 
     if (sample?.id === "incomplete") {
@@ -228,19 +268,19 @@ export async function demoProcessEmail(text) {
         };
     }
 
-    // Generic fallback: ask for clarification so demo never silently fails
     const workflowId = `demo-hitl-${Date.now()}`;
     pendingHitl.set(workflowId, { kind: "generic", rawText: text });
     return {
         status: "INTERRUPTED",
         workflowId,
         message:
-            "I couldn't confidently extract a full schedule from that text. Please reply with the child name, activity title, start/end dates, and start/end times (e.g. \"Sage, Art Camp, Aug 10–14, 9:00–12:00\").",
+            "I couldn't confidently extract a full schedule from that text. Please reply with the child name, activity title, start/end dates, and start/end times (e.g. \"Sage, Art Camp, 2026-07-20 to 2026-07-24, 9:00–12:00\").",
     };
 }
 
 export async function demoResumeWorkflow(workflowId, responseText) {
-    await delay(500);
+    await delay(450);
+    ensureMemory();
     const pending = pendingHitl.get(workflowId);
     pendingHitl.delete(workflowId);
 
@@ -256,8 +296,8 @@ export async function demoResumeWorkflow(workflowId, responseText) {
             end_time: parsed.end_time,
             notes: `${DEMO_KAI_PARTIAL.notes} Confirmed end: ${parsed.end_date} ${parsed.end_time}.`,
         };
-        const matrix = mergeActivity(loadDemoMatrix(), activity);
-        return { status: "COMPLETED", matrix };
+        const matrix = mergeActivity(activity);
+        return { status: "COMPLETED", matrix, addedActivity: activity };
     }
 
     const parsed = parseGenericScheduleReply(responseText);
@@ -271,12 +311,12 @@ export async function demoResumeWorkflow(workflowId, responseText) {
                 "Still missing details. Please include child, activity, dates (YYYY-MM-DD or Mon DD), and times (e.g. 9:00–12:00).",
         };
     }
-    const matrix = mergeActivity(loadDemoMatrix(), parsed);
-    return { status: "COMPLETED", matrix };
+    const matrix = mergeActivity(parsed);
+    return { status: "COMPLETED", matrix, addedActivity: parsed };
 }
 
 export function demoDeleteActivity({ activity_id, delete_type, date }) {
-    const matrix = loadDemoMatrix();
+    const matrix = ensureMemory();
     let activities = [...(matrix.activities || [])];
     const target = activities.find((a) => a.id === activity_id);
     if (!target) {
@@ -286,7 +326,6 @@ export function demoDeleteActivity({ activity_id, delete_type, date }) {
     if (delete_type === "series" || !date) {
         activities = activities.filter((a) => a.id !== activity_id);
     } else if (delete_type === "single") {
-        // Split series around the deleted day when needed
         activities = activities.filter((a) => a.id !== activity_id);
         const start = parseDate(target.start_date);
         const end = parseDate(target.end_date);
@@ -311,27 +350,31 @@ export function demoDeleteActivity({ activity_id, delete_type, date }) {
         }
     }
 
-    const next = {
+    memoryMatrix = {
         activities,
         gaps: recalculateGaps(activities),
         warnings: matrix.warnings || [],
     };
-    saveDemoMatrix(next);
-    return next;
+    persist();
+    return loadDemoMatrix();
 }
 
 function parseHitlEndDetails(text) {
     const lower = text.toLowerCase();
-    // Prefer explicit Aug 14 / August 14, 2026 defaults if user confirms the summit week
-    let end_date = "2026-08-14";
+    let end_date = "2026-07-24";
     let end_time = "17:00";
 
     const iso = text.match(/(\d{4}-\d{2}-\d{2})/);
     if (iso) end_date = iso[1];
 
-    const monthDay = lower.match(/aug(?:ust)?\s+(\d{1,2})(?:,?\s*2026)?/);
-    if (monthDay) {
-        end_date = `2026-08-${String(Number(monthDay[1])).padStart(2, "0")}`;
+    const julyDay = lower.match(/jul(?:y)?\s+(\d{1,2})(?:,?\s*2026)?/);
+    if (julyDay) {
+        end_date = `2026-07-${String(Number(julyDay[1])).padStart(2, "0")}`;
+    }
+
+    const augDay = lower.match(/aug(?:ust)?\s+(\d{1,2})(?:,?\s*2026)?/);
+    if (augDay) {
+        end_date = `2026-08-${String(Number(augDay[1])).padStart(2, "0")}`;
     }
 
     const timeMatch = text.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
@@ -341,7 +384,6 @@ function parseHitlEndDetails(text) {
         const ampm = (timeMatch[3] || "").toLowerCase();
         if (ampm === "pm" && h < 12) h += 12;
         if (ampm === "am" && h === 12) h = 0;
-        // If no am/pm and hour looks like end-of-day (3-7), treat as PM for camps
         if (!ampm && h >= 1 && h <= 7) h += 12;
         end_time = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
     }
@@ -365,7 +407,7 @@ function parseGenericScheduleReply(text) {
     const end_date = isoDates[1] || isoDates[0];
     const start_time = times[0] || "09:00";
     const end_time = times[1] || "12:00";
-    const titleMatch = text.match(/,\s*([^,]+?),\s*(?:aug|\d{4})/i);
+    const titleMatch = text.match(/,\s*([^,]+?),\s*(?:jul|aug|\d{4})/i);
     return {
         child_name: child.name,
         activity_title: titleMatch ? titleMatch[1].trim() : "Demo Activity",

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { auth, authSignOut, DIRECT_API_URL } from "../firebase.js";
 import { apiFetch } from "../api.js";
 import BrandLogo from "./BrandLogo.jsx";
@@ -7,7 +7,7 @@ import AlertsSidebar from "./AlertsSidebar.jsx";
 import HitlModal from "./HitlModal.jsx";
 import ProfileModal from "./ProfileModal.jsx";
 import DeleteActivityModal from "./DeleteActivityModal.jsx";
-import { DEMO_SAMPLE_EMAILS } from "../demo/demoData.js";
+import { DEMO_SAMPLE_EMAILS, DEMO_STORAGE_KEY } from "../demo/demoData.js";
 import {
     demoProcessEmail,
     demoResumeWorkflow,
@@ -15,6 +15,22 @@ import {
     resetDemoMatrix,
     restoreSeedDemoMatrix,
 } from "../demo/demoStore.js";
+
+function scrollToDayCard(dateStr) {
+    if (!dateStr) return;
+    requestAnimationFrame(() => {
+        const el = document.getElementById(`day-${dateStr}`);
+        if (el) {
+            el.classList.add("day-card-highlight");
+            el.scrollIntoView({ behavior: "smooth", block: "center" });
+            setTimeout(() => el.classList.remove("day-card-highlight"), 2400);
+        }
+    });
+}
+
+function isGuestDemo() {
+    return localStorage.getItem(DEMO_STORAGE_KEY) === "1";
+}
 
 export default function Dashboard({
     user,
@@ -38,9 +54,22 @@ export default function Dashboard({
     const [menuOpen, setMenuOpen] = useState(false);
     const [selectedActivity, setSelectedActivity] = useState(null); // { id, date, title, start_date, end_date }
     const [copiedEmailId, setCopiedEmailId] = useState(null);
+    const [pasteNotice, setPasteNotice] = useState(false);
+    const ingestTextareaRef = useRef(null);
+    const pasteNoticeTimer = useRef(null);
 
     const handleActivityClick = (id, date, title, start_date, end_date) => {
         setSelectedActivity({ id, date, title, start_date, end_date });
+    };
+
+    const applyDemoMatrix = (res) => {
+        if (!res?.matrix) return;
+        onMatrixChange?.(res.matrix);
+        const focusDate = res.addedActivity?.start_date;
+        if (focusDate) {
+            // Wait for React to paint the new day cards before scrolling.
+            setTimeout(() => scrollToDayCard(focusDate), 120);
+        }
     };
 
     const handleDeleteActivity = async (deleteType) => {
@@ -89,7 +118,12 @@ export default function Dashboard({
         return () => document.removeEventListener("click", handleOutsideClick);
     }, [menuOpen]);
 
+    useEffect(() => () => {
+        if (pasteNoticeTimer.current) clearTimeout(pasteNoticeTimer.current);
+    }, []);
+
     const showStatus = (msg, type) => setIngestStatus({ msg, type });
+    const inDemo = demoMode || isGuestDemo();
 
     const handleIngest = async () => {
         const text = ingestText.trim();
@@ -97,34 +131,41 @@ export default function Dashboard({
 
         showStatus("Processing text with AI...", "loading");
         setSubmitting(true);
+        setPasteNotice(false);
 
         try {
-            if (demoMode) {
+            if (inDemo) {
                 const res = await demoProcessEmail(text);
                 if (res.status === "INTERRUPTED") {
                     showStatus("Clarification required...", "loading");
                     setHitl({ workflowId: res.workflowId, question: res.message });
                 } else {
-                    onMatrixChange?.(res.matrix);
-                    showStatus("Schedule updated successfully!", "success");
+                    applyDemoMatrix(res);
+                    const title = res.addedActivity?.activity_title;
+                    const child = res.addedActivity?.child_name;
+                    showStatus(
+                        child && title
+                            ? `Added ${title} for ${child} to the schedule.`
+                            : "Schedule updated successfully!",
+                        "success"
+                    );
                     setIngestText("");
                 }
-                return;
-            }
-
-            const res = await apiFetch(token, "process-email", {
-                method: "POST",
-                body: JSON.stringify({ text, isDisruption }),
-                baseUrl: DIRECT_API_URL,
-            });
-
-            if (res.status === "INTERRUPTED") {
-                showStatus("Clarification required...", "loading");
-                setHitl({ workflowId: res.workflowId, question: res.message });
             } else {
-                showStatus("Schedule updated successfully!", "success");
-                setIngestText("");
-                onReload();
+                const res = await apiFetch(token, "process-email", {
+                    method: "POST",
+                    body: JSON.stringify({ text, isDisruption }),
+                    baseUrl: DIRECT_API_URL,
+                });
+
+                if (res.status === "INTERRUPTED") {
+                    showStatus("Clarification required...", "loading");
+                    setHitl({ workflowId: res.workflowId, question: res.message });
+                } else {
+                    showStatus("Schedule updated successfully!", "success");
+                    setIngestText("");
+                    onReload();
+                }
             }
         } catch (err) {
             showStatus(`Error: ${err.message}`, "error");
@@ -139,13 +180,20 @@ export default function Dashboard({
         showStatus("Resuming AI analysis...", "loading");
 
         try {
-            if (demoMode) {
+            if (inDemo) {
                 const res = await demoResumeWorkflow(workflowId, responseText);
                 if (res.status === "INTERRUPTED") {
                     setHitl({ workflowId: res.workflowId, question: res.message });
                 } else {
-                    onMatrixChange?.(res.matrix);
-                    showStatus("Schedule updated successfully!", "success");
+                    applyDemoMatrix(res);
+                    const title = res.addedActivity?.activity_title;
+                    const child = res.addedActivity?.child_name;
+                    showStatus(
+                        child && title
+                            ? `Added ${title} for ${child} to the schedule.`
+                            : "Schedule updated successfully!",
+                        "success"
+                    );
                     setIngestText("");
                 }
                 return;
@@ -200,16 +248,27 @@ export default function Dashboard({
     };
 
     const handleCopySampleEmail = async (email) => {
+        setIngestText(email.text);
+        setPasteNotice(true);
+        setCopiedEmailId(email.id);
+        if (pasteNoticeTimer.current) clearTimeout(pasteNoticeTimer.current);
+        pasteNoticeTimer.current = setTimeout(() => {
+            setPasteNotice(false);
+            setCopiedEmailId(null);
+        }, 4000);
+
         try {
             await navigator.clipboard.writeText(email.text);
-            setCopiedEmailId(email.id);
-            setIngestText(email.text);
-            setTimeout(() => setCopiedEmailId(null), 2000);
         } catch {
-            setIngestText(email.text);
-            setCopiedEmailId(email.id);
-            setTimeout(() => setCopiedEmailId(null), 2000);
+            /* paste into the textarea still works via setIngestText */
         }
+
+        requestAnimationFrame(() => {
+            const el = ingestTextareaRef.current;
+            if (!el) return;
+            el.scrollIntoView({ behavior: "smooth", block: "center" });
+            el.focus();
+        });
     };
 
     const handleResetSchedules = () => {
@@ -218,6 +277,7 @@ export default function Dashboard({
         onMatrixChange?.(empty);
         setIngestText("");
         setHitl(null);
+        setPasteNotice(false);
         showStatus("All schedules cleared. Paste a registration email to rebuild.", "success");
     };
 
@@ -227,6 +287,7 @@ export default function Dashboard({
         onMatrixChange?.(seed);
         setIngestText("");
         setHitl(null);
+        setPasteNotice(false);
         showStatus("Demo schedules restored for Remy and Quinn.", "success");
     };
 
@@ -237,7 +298,9 @@ export default function Dashboard({
             <header>
                 <div className="header-brand">
                     <BrandLogo size={36} textClassName="header-brand-title" />
-                    <span className="badge">{demoMode ? "Demo Mode" : "Concierge Active"}</span>
+                    <span className={`badge ${demoMode ? "badge-demo" : ""}`}>
+                        {demoMode ? "Demo Mode" : "Concierge Active"}
+                    </span>
                 </div>
                 <div className="header-actions desktop-nav">
                     {!demoMode && (
@@ -336,10 +399,15 @@ export default function Dashboard({
                         <h3>Ingest Schedule</h3>
                         <p className="section-desc">Paste an email, registration confirmation, or disruption notice.</p>
                         <textarea
+                            ref={ingestTextareaRef}
                             placeholder="e.g., Emily is registered for Soccer Camp from July 6 to July 10, daily 9:00 to 12:00..."
                             value={ingestText}
-                            onChange={(e) => setIngestText(e.target.value)}
+                            onChange={(e) => {
+                                setIngestText(e.target.value);
+                                if (pasteNotice) setPasteNotice(false);
+                            }}
                         />
+                        {pasteNotice && <div className="paste-notice">Text pasted</div>}
 
                         <div className="ingest-options">
                             <label className="checkbox-label">

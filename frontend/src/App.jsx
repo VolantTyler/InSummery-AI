@@ -55,7 +55,8 @@ export default function App() {
             setUser(DEMO_USER);
             setToken("demo-local-token");
             setProfile(DEMO_PROFILE);
-            setMatrix(loadDemoMatrix());
+            // Don't clobber an in-progress demo matrix on HMR / effect re-runs.
+            setMatrix((current) => current ?? loadDemoMatrix());
             setLoadError(null);
             setView("dashboard");
             return undefined;

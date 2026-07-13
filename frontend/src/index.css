@@ -316,14 +316,35 @@ body {
     font-weight: 600;
 }
 
-.auth-demo-link {
-    margin-top: 14px;
+.auth-demo-section {
+    margin-top: 8px;
 }
 
-.auth-demo-link a {
-    font-size: 15px;
-    text-decoration: underline;
-    text-underline-offset: 3px;
+.auth-demo-divider {
+    margin: 20px 0 16px;
+}
+
+.btn-demo-outline {
+    background: transparent;
+    color: #c2410c;
+    border: 2px solid #ea580c;
+    font-weight: 600;
+}
+
+.btn-demo-outline:hover:not(:disabled) {
+    background: #fff7ed;
+    border-color: #c2410c;
+    color: #9a3412;
+}
+
+[data-theme="dark"] .btn-demo-outline {
+    color: #fb923c;
+    border-color: #ea580c;
+}
+
+[data-theme="dark"] .btn-demo-outline:hover:not(:disabled) {
+    background: rgba(234, 88, 12, 0.15);
+    color: #fdba74;
 }
 
 .alert {
@@ -377,6 +398,18 @@ header {
     border-radius: 6px;
     font-size: 12px;
     font-weight: 600;
+}
+
+.badge-demo {
+    background-color: #e8d9c4;
+    color: #6b4f2a;
+    border: 1px solid #c4a574;
+}
+
+[data-theme="dark"] .badge-demo {
+    background-color: #5c4a32;
+    color: #f0e0c8;
+    border-color: #8a7355;
 }
 
 .header-actions {
@@ -791,6 +824,19 @@ header {
     color: var(--text-muted);
     margin: -8px 0 16px;
     line-height: 1.45;
+}
+
+.paste-notice {
+    margin-top: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--signin);
+}
+
+.day-card.day-card-highlight {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+    transition: outline-color 0.3s ease;
 }
 
 .status-active {

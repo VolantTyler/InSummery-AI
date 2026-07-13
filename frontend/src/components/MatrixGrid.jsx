@@ -186,7 +186,7 @@ export default function MatrixGrid({ matrix, profile, onActivityClick }) {
                 });
 
                 return (
-                    <div className="day-card" key={dateStr}>
+                    <div className="day-card" key={dateStr} id={`day-${dateStr}`}>
                         <div className="day-header">{dayName}</div>
                         <div className="children-columns">
                             {children.map(child => {
