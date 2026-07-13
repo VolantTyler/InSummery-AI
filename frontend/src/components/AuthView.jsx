@@ -27,7 +27,7 @@ function friendlyAuthError(err) {
     return err.message;
 }
 
-export default function AuthView() {
+export default function AuthView({ onStartDemo }) {
     const [isSignUpMode, setIsSignUpMode] = useState(false);
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -134,6 +134,24 @@ export default function AuthView() {
                         </a>
                     </p>
                 </div>
+
+                {onStartDemo && (
+                    <div className="auth-demo-section">
+                        <div className="auth-divider auth-demo-divider">
+                            <span>- OR -</span>
+                        </div>
+                        <button
+                            type="button"
+                            className="btn btn-demo-outline btn-block"
+                            disabled={loading}
+                            onClick={() => {
+                                if (!loading) onStartDemo();
+                            }}
+                        >
+                            Click here for demo
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );
