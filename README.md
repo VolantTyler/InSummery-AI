@@ -163,8 +163,11 @@ WEAVE_DISABLED=false
 
 `WANDB_API_KEY` is optional. When it is absent, or when
 `WEAVE_DISABLED=true`, the app skips Weave initialization and runs normally.
-When enabled, Weave is initialized with PII redaction and the application only
-records masked agent inputs plus summarized workflow/evaluation metadata. The
+When enabled, Weave is initialized with PII redaction and with automatic
+integration patching disabled (`implicitly_patch_integrations=False`), so it
+does not auto-trace the Google ADK / GenAI SDKs — auto-tracing would capture
+the raw email before `pii_mask_node` masks it. The application only records
+masked agent inputs plus summarized workflow/evaluation metadata. The
 existing `PIIMasker` remains the primary privacy boundary before LLM calls. For
 deployed Firebase Cloud Functions, configure `WANDB_API_KEY` and `WEAVE_PROJECT`
 as backend secrets/environment variables rather than frontend build variables.

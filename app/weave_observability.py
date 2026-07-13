@@ -35,7 +35,19 @@ def setup_weave() -> bool:
     import weave
 
     project = os.getenv("WEAVE_PROJECT", "insummery-ai")
-    weave.init(project, settings={"redact_pii": True})
+    # implicitly_patch_integrations=False keeps Weave from auto-tracing the
+    # Google ADK / GenAI SDKs. The workflow receives the *raw* email as
+    # `new_message` and only masks it inside pii_mask_node, so automatic ADK
+    # input capture would export unmasked PII. With autopatching off, the only
+    # data Weave receives is what the explicit helpers below record, all of
+    # which is masked or summarized metadata.
+    weave.init(
+        project,
+        settings={
+            "redact_pii": True,
+            "implicitly_patch_integrations": False,
+        },
+    )
     _INITIALIZED = True
     return True
 
