@@ -7,8 +7,28 @@ import AlertsSidebar from "./AlertsSidebar.jsx";
 import HitlModal from "./HitlModal.jsx";
 import ProfileModal from "./ProfileModal.jsx";
 import DeleteActivityModal from "./DeleteActivityModal.jsx";
+import { DEMO_SAMPLE_EMAILS } from "../demo/demoData.js";
+import {
+    demoProcessEmail,
+    demoResumeWorkflow,
+    demoDeleteActivity,
+    resetDemoMatrix,
+    restoreSeedDemoMatrix,
+} from "../demo/demoStore.js";
 
-export default function Dashboard({ user, token, profile, matrix, loadError, onReload, theme, onToggleTheme }) {
+export default function Dashboard({
+    user,
+    token,
+    profile,
+    matrix,
+    loadError,
+    onReload,
+    theme,
+    onToggleTheme,
+    demoMode = false,
+    onExitDemo,
+    onMatrixChange,
+}) {
     const [ingestText, setIngestText] = useState("");
     const [isDisruption, setIsDisruption] = useState(false);
     const [ingestStatus, setIngestStatus] = useState(null); // { msg, type }
@@ -17,6 +37,7 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
     const [profileOpen, setProfileOpen] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const [selectedActivity, setSelectedActivity] = useState(null); // { id, date, title, start_date, end_date }
+    const [copiedEmailId, setCopiedEmailId] = useState(null);
 
     const handleActivityClick = (id, date, title, start_date, end_date) => {
         setSelectedActivity({ id, date, title, start_date, end_date });
@@ -30,14 +51,25 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
         setSelectedActivity(null);
 
         try {
-            const res = await apiFetch(token, "delete-activity", {
+            if (demoMode) {
+                const next = demoDeleteActivity({
+                    activity_id: actId,
+                    delete_type: deleteType,
+                    date: actDate,
+                });
+                onMatrixChange?.(next);
+                showStatus("Activity deleted successfully!", "success");
+                return;
+            }
+
+            await apiFetch(token, "delete-activity", {
                 method: "POST",
                 body: JSON.stringify({
                     activity_id: actId,
                     delete_type: deleteType,
-                    date: actDate
+                    date: actDate,
                 }),
-                baseUrl: DIRECT_API_URL
+                baseUrl: DIRECT_API_URL,
             });
             showStatus("Activity deleted successfully!", "success");
             onReload();
@@ -46,7 +78,6 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
         }
     };
 
-    // Close mobile dropdown when clicking outside
     useEffect(() => {
         if (!menuOpen) return;
         const handleOutsideClick = (e) => {
@@ -68,12 +99,23 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
         setSubmitting(true);
 
         try {
-            // Bypasses Firebase Hosting's /api rewrite (hard 60s proxy
-            // timeout) since the multi-step LLM workflow can run longer.
+            if (demoMode) {
+                const res = await demoProcessEmail(text);
+                if (res.status === "INTERRUPTED") {
+                    showStatus("Clarification required...", "loading");
+                    setHitl({ workflowId: res.workflowId, question: res.message });
+                } else {
+                    onMatrixChange?.(res.matrix);
+                    showStatus("Schedule updated successfully!", "success");
+                    setIngestText("");
+                }
+                return;
+            }
+
             const res = await apiFetch(token, "process-email", {
                 method: "POST",
                 body: JSON.stringify({ text, isDisruption }),
-                baseUrl: DIRECT_API_URL
+                baseUrl: DIRECT_API_URL,
             });
 
             if (res.status === "INTERRUPTED") {
@@ -97,10 +139,22 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
         showStatus("Resuming AI analysis...", "loading");
 
         try {
+            if (demoMode) {
+                const res = await demoResumeWorkflow(workflowId, responseText);
+                if (res.status === "INTERRUPTED") {
+                    setHitl({ workflowId: res.workflowId, question: res.message });
+                } else {
+                    onMatrixChange?.(res.matrix);
+                    showStatus("Schedule updated successfully!", "success");
+                    setIngestText("");
+                }
+                return;
+            }
+
             const res = await apiFetch(token, "resume-workflow", {
                 method: "POST",
                 body: JSON.stringify({ workflowId, response: responseText }),
-                baseUrl: DIRECT_API_URL
+                baseUrl: DIRECT_API_URL,
             });
 
             if (res.status === "INTERRUPTED") {
@@ -133,7 +187,7 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
         showStatus("Syncing with Google Calendar...", "loading");
         try {
             const res = await apiFetch(token, "sync-calendar", {
-                method: "POST"
+                method: "POST",
             });
             if (res.status === "SUCCESS") {
                 showStatus("Google Calendar synced successfully!", "success");
@@ -145,6 +199,37 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
         }
     };
 
+    const handleCopySampleEmail = async (email) => {
+        try {
+            await navigator.clipboard.writeText(email.text);
+            setCopiedEmailId(email.id);
+            setIngestText(email.text);
+            setTimeout(() => setCopiedEmailId(null), 2000);
+        } catch {
+            setIngestText(email.text);
+            setCopiedEmailId(email.id);
+            setTimeout(() => setCopiedEmailId(null), 2000);
+        }
+    };
+
+    const handleResetSchedules = () => {
+        if (!demoMode) return;
+        const empty = resetDemoMatrix();
+        onMatrixChange?.(empty);
+        setIngestText("");
+        setHitl(null);
+        showStatus("All schedules cleared. Paste a registration email to rebuild.", "success");
+    };
+
+    const handleRestoreSeed = () => {
+        if (!demoMode) return;
+        const seed = restoreSeedDemoMatrix();
+        onMatrixChange?.(seed);
+        setIngestText("");
+        setHitl(null);
+        showStatus("Demo schedules restored for Remy and Quinn.", "success");
+    };
+
     const calendarConnected = profile?.google_calendar_connected === true;
 
     return (
@@ -152,14 +237,24 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
             <header>
                 <div className="header-brand">
                     <BrandLogo size={36} textClassName="header-brand-title" />
-                    <span className="badge">Concierge Active</span>
+                    <span className="badge">{demoMode ? "Demo Mode" : "Concierge Active"}</span>
                 </div>
-                {/* Desktop Nav Actions */}
                 <div className="header-actions desktop-nav">
-                    <button className="btn btn-sm btn-outline" onClick={() => setProfileOpen(true)}>
-                        Family Profile
-                    </button>
-                    {calendarConnected ? (
+                    {!demoMode && (
+                        <button className="btn btn-sm btn-outline" onClick={() => setProfileOpen(true)}>
+                            Family Profile
+                        </button>
+                    )}
+                    {demoMode ? (
+                        <>
+                            <button className="btn btn-sm btn-outline" onClick={handleRestoreSeed}>
+                                Restore demo schedules
+                            </button>
+                            <button className="btn btn-sm btn-outline btn-danger-outline" onClick={handleResetSchedules}>
+                                Reset all schedules
+                            </button>
+                        </>
+                    ) : calendarConnected ? (
                         <button className="btn btn-sm btn-outline" onClick={handleSyncCalendar}>
                             Sync Calendar
                         </button>
@@ -173,28 +268,47 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
                     </button>
                     <div className="user-profile">
                         <span>{user ? (user.displayName || user.email) : "Sign In"}</span>
-                        {user && (
-                            <button className="btn btn-sm btn-outline" onClick={() => authSignOut(auth)}>
-                                Sign Out
+                        {demoMode ? (
+                            <button className="btn btn-sm btn-outline" onClick={onExitDemo}>
+                                Exit Demo
                             </button>
+                        ) : (
+                            user && (
+                                <button className="btn btn-sm btn-outline" onClick={() => authSignOut(auth)}>
+                                    Sign Out
+                                </button>
+                            )
                         )}
                     </div>
                 </div>
 
-                {/* Mobile Nav Actions */}
                 <div className="mobile-menu-container">
                     <button className="mobile-menu-toggle" onClick={() => setMenuOpen(!menuOpen)}>
                         <span>{user ? (user.displayName || user.email) : "Sign In"}</span>
-                        <svg className={`chevron-icon ${menuOpen ? 'open' : ''}`} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <svg className={`chevron-icon ${menuOpen ? "open" : ""}`} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <polyline points="6 9 12 15 18 9"></polyline>
                         </svg>
                     </button>
                     {menuOpen && (
                         <div className="mobile-dropdown-menu">
-                            <button className="dropdown-item" onClick={() => { setProfileOpen(true); setMenuOpen(false); }}>
-                                Family Profile
-                            </button>
-                            {calendarConnected ? (
+                            {!demoMode && (
+                                <button className="dropdown-item" onClick={() => { setProfileOpen(true); setMenuOpen(false); }}>
+                                    Family Profile
+                                </button>
+                            )}
+                            {demoMode ? (
+                                <>
+                                    <button className="dropdown-item" onClick={() => { handleRestoreSeed(); setMenuOpen(false); }}>
+                                        Restore demo schedules
+                                    </button>
+                                    <button className="dropdown-item" onClick={() => { handleResetSchedules(); setMenuOpen(false); }}>
+                                        Reset all schedules
+                                    </button>
+                                    <button className="dropdown-item logout-item" onClick={() => { onExitDemo?.(); setMenuOpen(false); }}>
+                                        Exit Demo
+                                    </button>
+                                </>
+                            ) : calendarConnected ? (
                                 <button className="dropdown-item" onClick={() => { handleSyncCalendar(); setMenuOpen(false); }}>
                                     Sync Calendar
                                 </button>
@@ -206,7 +320,7 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
                             <button className="dropdown-item" onClick={() => { onToggleTheme(); setMenuOpen(false); }}>
                                 {theme === "dark" ? "Light Mode" : "Dark Mode"}
                             </button>
-                            {user && (
+                            {!demoMode && user && (
                                 <button className="dropdown-item logout-item" onClick={() => { authSignOut(auth); setMenuOpen(false); }}>
                                     Sign Out
                                 </button>
@@ -233,6 +347,7 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
                                     type="checkbox"
                                     checked={isDisruption}
                                     onChange={(e) => setIsDisruption(e.target.checked)}
+                                    disabled={demoMode}
                                 />
                                 <span>This is a schedule disruption</span>
                             </label>
@@ -248,6 +363,32 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
                         )}
                     </div>
 
+                    {demoMode && (
+                        <div className="sidebar-card demo-samples-card">
+                            <h3>Sample registration emails</h3>
+                            <p className="section-desc">
+                                Copy into the ingest box to try high-confidence parsing or the parent confirmation flow.
+                            </p>
+                            <div className="demo-sample-list">
+                                {DEMO_SAMPLE_EMAILS.map((email) => (
+                                    <div className="demo-sample-item" key={email.id}>
+                                        <div className="demo-sample-meta">
+                                            <strong>{email.label}</strong>
+                                            <span>{email.description}</span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            className="btn btn-sm btn-outline"
+                                            onClick={() => handleCopySampleEmail(email)}
+                                        >
+                                            {copiedEmailId === email.id ? "Copied" : "Copy & paste"}
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     <AlertsSidebar matrix={matrix} />
                 </aside>
 
@@ -261,6 +402,13 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
                             <span className="legend-item"><span className="color-box status-gap"></span> Gap</span>
                         </div>
                     </div>
+
+                    {demoMode && (
+                        <p className="demo-matrix-hint">
+                            Preloaded family: Jordan Okonkwo &amp; Avery Chen with Remy, Quinn, Sage, and Kai.
+                            Remy and Quinn have camps across four weeks in July–August; Sage and Kai are ready for the sample emails.
+                        </p>
+                    )}
 
                     <div className="matrix-grid">
                         {loadError ? (
@@ -276,7 +424,7 @@ export default function Dashboard({ user, token, profile, matrix, loadError, onR
                 </main>
             </div>
 
-            {profileOpen && (
+            {profileOpen && !demoMode && (
                 <ProfileModal
                     token={token}
                     onClose={() => setProfileOpen(false)}

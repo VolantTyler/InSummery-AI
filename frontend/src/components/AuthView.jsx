@@ -27,7 +27,7 @@ function friendlyAuthError(err) {
     return err.message;
 }
 
-export default function AuthView() {
+export default function AuthView({ onStartDemo }) {
     const [isSignUpMode, setIsSignUpMode] = useState(false);
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -133,6 +133,19 @@ export default function AuthView() {
                             {isSignUpMode ? "Sign In" : "Sign Up"}
                         </a>
                     </p>
+                    {onStartDemo && (
+                        <p className="auth-demo-link">
+                            <a
+                                href="#"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    if (!loading) onStartDemo();
+                                }}
+                            >
+                                Click here for demo
+                            </a>
+                        </p>
+                    )}
                 </div>
             </div>
         </div>
