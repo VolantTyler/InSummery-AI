@@ -15,7 +15,13 @@ from app.pii_masker import PIIMasker
 from app.storage import LocalStorageProvider, FirestoreStorageProvider
 from app.schemas import InterpretationResult, DisruptionDetail
 from app.matrix_logic import calculate_gaps, merge_activities, apply_disruption, parse_date
-from app.weave_observability import trace_agent_call, trace_confidence_gate, trace_pii_mask
+from app.weave_observability import (
+    check_extraction_guardrails,
+    trace_agent_call,
+    trace_confidence_gate,
+    trace_guardrail,
+    trace_pii_mask,
+)
 
 def _get_storage_provider(ctx: Context) -> Any:
     mode = ctx.state.get("mode", "local")
@@ -78,6 +84,9 @@ async def interpreter_registration_node(ctx: Context, node_input: str) -> Any:
     masked_text = ctx.state.get("masked_text") or node_input
     res = await ctx.run_node(agent, masked_text)
     await trace_agent_call("interpreter_agent_registration", masked_text, res)
+    guard = check_extraction_guardrails("registration", res)
+    await trace_guardrail(guard)
+    ctx.state["guardrail"] = guard
     return res
 
 def _build_masked_schedule_context(ctx: Context) -> str:
@@ -128,6 +137,9 @@ async def interpreter_disruption_node(ctx: Context, node_input: str) -> Any:
     masked_text = ctx.state.get("masked_text") or node_input
     res = await ctx.run_node(agent, masked_text)
     await trace_agent_call("interpreter_agent_disruption", masked_text, res)
+    guard = check_extraction_guardrails("disruption", res)
+    await trace_guardrail(guard)
+    ctx.state["guardrail"] = guard
     return res
 
 async def confidence_gate_node(ctx: Context, node_input: Any) -> str:
@@ -190,6 +202,9 @@ async def hitl_node(ctx: Context, node_input: Any) -> Any:
         agent = build_interpreter_hitl_agent()
         res = await ctx.run_node(agent, masked_combined)
         await trace_agent_call("interpreter_agent_hitl", masked_combined, res)
+        guard = check_extraction_guardrails("registration", res)
+        await trace_guardrail(guard)
+        ctx.state["guardrail"] = guard
         # Overwrite the low-confidence extraction saved by confidence_gate_node,
         # otherwise matrix_analyzer_node would reuse the stale pre-clarification
         # result from state and discard the clarified one.
@@ -267,10 +282,19 @@ async def matrix_analyzer_node(ctx: Context, node_input: Any) -> Dict[str, Any]:
                 f"activity: {dis_dict.get('activity_title') or 'unspecified'}, "
                 f"date: {dis_dict.get('date')}). The schedule was not changed."
             )
+            ctx.state["disruption_matched"] = False
+        else:
+            ctx.state["disruption_matched"] = True
     else:
         # General inquiry, no matrix changes
         updated_matrix = current_matrix
         warnings = []
+
+    # Surface guardrail violations as soft warnings (do not invent schedule data).
+    guard = ctx.state.get("guardrail") or {}
+    if guard and not guard.get("passed", True):
+        codes = ", ".join(guard.get("violations") or []) or "unknown"
+        warnings.append(f"Extraction guardrail flagged issues: {codes}")
 
     # 3. Perform Gap Analysis
     # Determine the date range for gap analysis: from today to 4 weeks out,

@@ -201,9 +201,9 @@ firebase deploy --only functions --project in-summery
 
 ## Optional Weave Observability
 
-InSummery can send masked agent traces and summarized eval results to
-Weights & Biases Weave. Keep Weave credentials server-side only; do not add
-these values to `frontend/.env*` files.
+InSummery can send masked agent traces, guardrail checks, HITL feedback, and
+summarized eval results to Weights & Biases Weave. Keep Weave credentials
+server-side only; do not add these values to `frontend/.env*` files.
 
 For local CLI and eval runs, copy `.env.example` to `.env` and set:
 
@@ -219,10 +219,37 @@ When enabled, Weave is initialized with PII redaction and with automatic
 integration patching disabled (`implicitly_patch_integrations=False`), so it
 does not auto-trace the Google ADK / GenAI SDKs — auto-tracing would capture
 the raw email before `pii_mask_node` masks it. The application only records
-masked agent inputs plus summarized workflow/evaluation metadata. The
-existing `PIIMasker` remains the primary privacy boundary before LLM calls. For
-deployed Firebase Cloud Functions, configure `WANDB_API_KEY` and `WEAVE_PROJECT`
-as backend secrets/environment variables rather than frontend build variables.
+masked/summarized metadata (status, category, confidence, latency, warnings,
+guardrail codes). The existing `PIIMasker` remains the primary privacy
+boundary before LLM calls. For deployed Firebase Cloud Functions, configure
+`WANDB_API_KEY` and `WEAVE_PROJECT` as backend secrets/environment variables
+rather than frontend build variables.
+
+Note that `WEAVE_PROJECT` must include your W&B entity/team (e.g.
+`your-entity/insummery-ai`), not just the project name.
+
+### What gets traced
+
+| Op | When |
+|----|------|
+| `insummery.workflow.pii_mask` | After PII masking |
+| `insummery.workflow.agent_call` | After each LLM agent (summary only) |
+| `insummery.workflow.confidence_gate` | HIGH vs LOW (HITL) route |
+| `insummery.workflow.guardrail` | Post-interpreter structural checks |
+| `insummery.workflow.run` | End-of-run status / soft-failure summary |
+| `insummery.workflow.hitl_feedback` | Parent clarification resume (length only) |
+| `insummery.eval.case` | Per-case eval breadcrumbs |
+
+### Publish evals and activate monitors
+
+```bash
+insummery-eval run --weave-publish       # mirror local scores into Weave Evaluations
+insummery-eval weave-monitors --dry-run  # preview production monitors
+insummery-eval weave-monitors            # activate soft-failure monitors
+```
+
+Weave Monitors score agent soft failures (unmatched disruptions, guardrail
+fails, HITL rate). Use GCP Cloud Monitoring for HTTP 5xx / function uptime.
 
 ---
 
@@ -247,7 +274,9 @@ interpreter → confidence gate):
 ```bash
 insummery-eval run                    # run all suites, gate on thresholds + baseline
 insummery-eval run --suites workflow  # end-to-end workflow suite only (quick live sanity check)
+insummery-eval run --weave-publish    # also mirror scores into Weave Evaluations
 insummery-eval baseline               # regenerate the baseline after intentional changes
+insummery-eval weave-monitors         # activate Weave soft-failure monitors (requires Weave)
 ```
 
 Executing the evals requires a `GEMINI_API_KEY` (or a running Ollama
