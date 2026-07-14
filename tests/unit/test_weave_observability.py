@@ -14,6 +14,7 @@ from app.weave_monitors import ensure_production_monitors, build_monitors
 @pytest.fixture(autouse=True)
 def reset_initialized_flag(monkeypatch):
     monkeypatch.setattr(wo, "_INITIALIZED", False)
+    monkeypatch.delenv("WEAVE_PRESIDIO_GUARDRAIL", raising=False)
 
 
 @pytest.fixture
@@ -171,6 +172,80 @@ def test_guardrail_flags_email_leak_in_notes():
     gated = wo.check_extraction_guardrails("registration", result)
     assert gated["passed"] is False
     assert "possible_email_leak" in gated["violations"]
+
+
+def test_presidio_guardrail_opt_in(monkeypatch):
+    """When enabled, Presidio findings become violation codes (mocked engine)."""
+    monkeypatch.setenv("WEAVE_PRESIDIO_GUARDRAIL", "true")
+
+    class FakeResult:
+        def __init__(self, entity_type: str):
+            self.entity_type = entity_type
+
+    class FakeAnalyzer:
+        def analyze(self, text, language, entities):
+            return [FakeResult("EMAIL_ADDRESS")]
+
+    monkeypatch.setattr(
+        wo,
+        "_presidio_leak_violations",
+        lambda text: ["presidio_email_address"] if "example.com" in text else [],
+    )
+
+    detail = DisruptionDetail(
+        child_name="Emily",
+        date="2026-07-07",
+        description="Reach me at parent@example.com",
+        disruption_type="CANCELLATION",
+    )
+    result = wo.check_extraction_guardrails("disruption", detail)
+    assert result["passed"] is False
+    assert result["details"].get("presidio") is True
+    assert "possible_email_leak" in result["violations"]
+    assert "presidio_email_address" in result["violations"]
+
+
+def test_hitl_dataset_append_sanitized(tmp_path, monkeypatch):
+    from app.evaluation.hitl_dataset import record_hitl_eval_case
+
+    path = tmp_path / "hitl.json"
+    monkeypatch.setenv("INSUMMERY_HITL_DATASET_APPEND", "true")
+    monkeypatch.setenv("INSUMMERY_HITL_DATASET_PATH", str(path))
+    monkeypatch.delenv("WANDB_API_KEY", raising=False)
+
+    result = record_hitl_eval_case(
+        workflow_id="session_1",
+        status="COMPLETED",
+        clarification_chars=42,
+        category="registration",
+        confidence_before=55,
+        confidence_after=92,
+        activity_count=1,
+    )
+    assert result["local_path"] == str(path)
+    assert result["weave_published"] is False
+    case = result["case"]
+    assert "clarification" not in case
+    assert case["clarification_chars"] == 42
+    assert "secret parent text" not in str(case)
+
+    import json
+
+    rows = json.loads(path.read_text())
+    assert len(rows) == 1
+    assert rows[0]["id"] == "hitl_session_1"
+
+
+def test_build_eval_scorers():
+    pytest.importorskip("weave")
+    from app.evaluation.weave_publish import build_eval_scorers
+
+    scorers = build_eval_scorers()
+    assert set(scorers) == {"triager", "registration", "disruption", "workflow"}
+    triager = scorers["triager"].score(
+        output={"expected": "registration", "predicted": "registration"}
+    )
+    assert triager["score"] == 1.0
 
 
 def test_trace_workflow_run_noop_without_weave():

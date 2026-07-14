@@ -21,9 +21,14 @@ ALLOWED_DISRUPTION_TYPES = frozenset({"CANCELLATION", "DELAY", "SICK_LEAVE"})
 # Defense-in-depth patterns for values that should never appear in LLM output
 # after PII masking (emails/phones). Names are intentionally omitted — family
 # names can appear as placeholders like [CHILD_1] and real first names are
-# sometimes schedule titles; Presidio-style name checks are too noisy here.
+# sometimes schedule titles; Presidio PERSON checks are too noisy here.
 _LEAK_EMAIL = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 _LEAK_PHONE = re.compile(r"\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b")
+
+# Opt-in Presidio pass over masked interpreter field text.
+# Set WEAVE_PRESIDIO_GUARDRAIL=true to enable (requires presidio-analyzer).
+_PRESIDIO_ENABLED_VALUES = {"1", "true", "yes", "on"}
+_PRESIDIO_ENTITIES = ("EMAIL_ADDRESS", "PHONE_NUMBER", "US_SSN", "CREDIT_CARD")
 
 
 def weave_enabled() -> bool:
@@ -120,11 +125,66 @@ def _response_summary(response: Any) -> Dict[str, Any]:
     return summary
 
 
+def _presidio_guardrail_enabled() -> bool:
+    return os.getenv("WEAVE_PRESIDIO_GUARDRAIL", "").lower() in _PRESIDIO_ENABLED_VALUES
+
+
+def _collect_text_fields(data: Dict[str, Any], category: Optional[str]) -> str:
+    """Concatenate interpreter text fields for leak scanning (still masked)."""
+    chunks: List[str] = []
+    if category == "registration":
+        for act in data.get("activities") or []:
+            act_dict = act.model_dump() if hasattr(act, "model_dump") else act
+            if not isinstance(act_dict, dict):
+                continue
+            for field in ("child_name", "activity_title", "location", "notes"):
+                val = act_dict.get(field)
+                if isinstance(val, str) and val:
+                    chunks.append(val)
+    elif category == "disruption":
+        for field in ("child_name", "activity_title", "description"):
+            val = data.get(field)
+            if isinstance(val, str) and val:
+                chunks.append(val)
+    return "\n".join(chunks)
+
+
+def _presidio_leak_violations(text: str) -> List[str]:
+    """Run Presidio on masked field text; return violation codes (no spans)."""
+    if not text.strip():
+        return []
+    try:
+        from presidio_analyzer import AnalyzerEngine
+    except ImportError:
+        return []
+
+    try:
+        analyzer = AnalyzerEngine()
+        results = analyzer.analyze(
+            text=text,
+            language="en",
+            entities=list(_PRESIDIO_ENTITIES),
+        )
+    except SystemExit:
+        # Presidio may attempt to download a spaCy model via sys.exit on failure.
+        return []
+    except Exception:  # noqa: BLE001 - guardrails must never break extraction
+        return []
+
+    codes = []
+    for entity in {r.entity_type for r in results}:
+        codes.append(f"presidio_{entity.lower()}")
+    return codes
+
+
 def check_extraction_guardrails(category: Optional[str], response: Any) -> Dict[str, Any]:
     """Validate interpreter output before it reaches the schedule matrix.
 
     Returns a dict with ``passed``, ``violations`` (list of codes), and
     ``details``. Does not include raw field values — only structural flags.
+
+    When ``WEAVE_PRESIDIO_GUARDRAIL=true``, also runs Presidio over masked
+    text fields for email/phone/SSN/credit-card entities.
     """
     violations: List[str] = []
     details: Dict[str, Any] = {"category": category}
@@ -172,6 +232,10 @@ def check_extraction_guardrails(category: Optional[str], response: Any) -> Dict[
                 violations.append("possible_email_leak")
             if isinstance(val, str) and _LEAK_PHONE.search(val):
                 violations.append("possible_phone_leak")
+
+    if _presidio_guardrail_enabled() and isinstance(data, dict):
+        details["presidio"] = True
+        violations.extend(_presidio_leak_violations(_collect_text_fields(data, category)))
 
     # Dedupe while preserving order
     seen = set()
@@ -305,21 +369,60 @@ async def trace_hitl_feedback(
     clarification_chars: int,
     status: str,
     confidence_after: Optional[float] = None,
+    confidence_before: Optional[float] = None,
+    category: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Record that a parent clarified a low-confidence extraction (no raw text)."""
+    """Record that a parent clarified a low-confidence extraction (no raw text).
+
+    When Weave is active, also attaches structured Call feedback so the
+    clarification shows up on the Trace feedback panel.
+    """
+    import inspect
 
     async def _record() -> Dict[str, Any]:
         return {
             "workflow_id": workflow_id,
             "clarification_chars": clarification_chars,
             "status": status,
+            "confidence_before": confidence_before,
             "confidence_after": confidence_after,
+            "category": category,
             "feedback_type": "hitl_clarification",
         }
 
+    payload = await _record()
     if not _INITIALIZED:
-        return await _record()
-    return await weave_op("insummery.workflow.hitl_feedback")(_record)()
+        return payload
+
+    import weave
+
+    @weave.op(name="insummery.workflow.hitl_feedback")
+    async def _op() -> Dict[str, Any]:
+        return payload
+
+    try:
+        maybe = _op.call()
+        result, call = await maybe if inspect.isawaitable(maybe) else maybe
+        try:
+            call.feedback.add(
+                "hitl_clarification",
+                {
+                    "status": status,
+                    "clarification_chars": clarification_chars,
+                    "confidence_before": confidence_before,
+                    "confidence_after": confidence_after,
+                    "category": category,
+                },
+            )
+            if status == "COMPLETED":
+                call.feedback.add_reaction("👍")
+            elif status == "ERROR":
+                call.feedback.add_reaction("👎")
+        except Exception:  # noqa: BLE001 - feedback is best-effort
+            pass
+        return result if isinstance(result, dict) else payload
+    except Exception:  # noqa: BLE001 - fall back to plain op invoke
+        return await weave_op("insummery.workflow.hitl_feedback")(_record)()
 
 
 def trace_eval_case(

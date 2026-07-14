@@ -4,6 +4,7 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, Optional
 
+from app.evaluation.hitl_dataset import record_hitl_eval_case
 from app.weave_observability import trace_hitl_feedback, trace_workflow_run
 
 
@@ -24,6 +25,18 @@ def _confidence_from_state(state: Dict[str, Any]) -> Optional[float]:
         return float(extraction.confidence_score)
     if isinstance(extraction, dict) and "confidence_score" in extraction:
         return float(extraction["confidence_score"])
+    return None
+
+
+def _activity_count_from_state(state: Dict[str, Any]) -> Optional[int]:
+    extraction = state.get("extraction_result")
+    if extraction is None:
+        return None
+    if hasattr(extraction, "activities"):
+        return len(extraction.activities or [])
+    if isinstance(extraction, dict):
+        acts = extraction.get("activities") or []
+        return len(acts) if isinstance(acts, list) else None
     return None
 
 
@@ -70,11 +83,34 @@ async def emit_hitl_feedback(
     clarification: str,
     status: str,
     state: Optional[Dict[str, Any]] = None,
+    confidence_before: Optional[float] = None,
 ) -> Dict[str, Any]:
-    """Record HITL clarification metadata (never the clarification text)."""
-    return await trace_hitl_feedback(
+    """Record HITL clarification as Weave feedback + optional eval dataset row.
+
+    Never records the clarification text itself — only its length and
+    structural outcomes.
+    """
+    state = state or {}
+    confidence_after = _confidence_from_state(state)
+    category = state.get("category")
+    clarification_chars = len(clarification or "")
+
+    traced = await trace_hitl_feedback(
         workflow_id=workflow_id,
-        clarification_chars=len(clarification or ""),
+        clarification_chars=clarification_chars,
         status=status,
-        confidence_after=_confidence_from_state(state or {}),
+        confidence_after=confidence_after,
+        confidence_before=confidence_before,
+        category=category,
     )
+
+    record_hitl_eval_case(
+        workflow_id=workflow_id,
+        status=status,
+        clarification_chars=clarification_chars,
+        category=category,
+        confidence_before=confidence_before,
+        confidence_after=confidence_after,
+        activity_count=_activity_count_from_state(state),
+    )
+    return traced

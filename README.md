@@ -237,13 +237,23 @@ Note that `WEAVE_PROJECT` must include your W&B entity/team (e.g.
 | `insummery.workflow.confidence_gate` | HIGH vs LOW (HITL) route |
 | `insummery.workflow.guardrail` | Post-interpreter structural checks |
 | `insummery.workflow.run` | End-of-run status / soft-failure summary |
-| `insummery.workflow.hitl_feedback` | Parent clarification resume (length only) |
+| `insummery.workflow.hitl_feedback` | Parent clarification + Call feedback |
 | `insummery.eval.case` | Per-case eval breadcrumbs |
+
+Optional Presidio defense-in-depth on masked interpreter fields:
+
+```bash
+WEAVE_PRESIDIO_GUARDRAIL=true
+```
+
+HITL clarifications also grow a sanitized local dataset (no clarification text)
+at `data/hitl_feedback_cases.json` and publish to the Weave Dataset
+`insummery-hitl-feedback`. Disable with `INSUMMERY_HITL_DATASET_APPEND=false`.
 
 ### Publish evals and activate monitors
 
 ```bash
-insummery-eval run --weave-publish       # mirror local scores into Weave Evaluations
+insummery-eval run --weave-publish       # Datasets + EvaluationLogger mirror
 insummery-eval weave-monitors --dry-run  # preview production monitors
 insummery-eval weave-monitors            # activate soft-failure monitors
 ```
