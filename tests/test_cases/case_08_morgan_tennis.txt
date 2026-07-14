@@ -1,6 +1,6 @@
 From: Springville Racquet Club <billing@springvilleracquet.com>
-To: John Smith <john.smith@example.com>
-Subject: INVOICE AND CONFIRMATION: Junior Tennis Camp (Lucas Smith)
+To: Jamie Smith <jamie.smith@example.com>
+Subject: INVOICE AND CONFIRMATION: Junior Tennis Camp (Morgan Smith)
 Date: Mon, 22 Jun 2026 15:40:02 -0400
 
 =======================================================
@@ -8,12 +8,12 @@ SPRINGVILLE RACQUET CLUB - PROGRAM CONFIRMATION
 =======================================================
 
 Transaction Date: June 22, 2026
-Billing Account: John Smith
+Billing Account: Jamie Smith
 Payment Method: Visa ending in 9876
 
 Registration Details:
 -------------------------------------------------------
-Participant: Lucas Smith (Age 6)
+Participant: Morgan Smith (Age 6)
 Program: Junior Development Tennis Camp (Under-8 Division)
 Dates: July 20, 2026 - July 24, 2026 (Monday through Friday)
 Time: 1:30 PM - 4:30 PM
@@ -30,7 +30,7 @@ CAMP INFORMATION & POLICIES
 =======================================================
 - Rain Policy: In the event of rain or wet courts, the clinic will be moved indoors to the main dome (Courts 1-4). You will receive an automated SMS notification by 12:30 PM on days with questionable weather.
 - Footwear: All players must wear non-marking tennis court shoes. Running shoes with deep black treads are not allowed on the clay/hard courts.
-- Equipment: Since you opted for the racquet rental, Lucas can collect his racquet from the pro shop on Monday, July 20 at 1:15 PM.
+- Equipment: Since you opted for the racquet rental, Morgan can collect their racquet from the pro shop on Monday, July 20 at 1:15 PM.
 
 If you have any billing or schedule inquiries, please contact the Head Pro, Marcus Vance, at 555-836-6477 or tennispro@springvilleracquet.com.
 

@@ -1,17 +1,17 @@
 [
-  {"id": "triage_reg_01", "file": "tests/test_cases/case_01_emily_soccer.txt", "expected_category": "registration"},
-  {"id": "triage_reg_02", "file": "tests/test_cases/case_02_jack_robotics.txt", "expected_category": "registration"},
-  {"id": "triage_reg_03", "file": "tests/test_cases/case_03_sophia_art.txt", "expected_category": "registration"},
-  {"id": "triage_reg_04", "file": "tests/test_cases/case_04_liam_wilderness.txt", "expected_category": "registration"},
-  {"id": "triage_reg_05", "file": "tests/test_cases/case_05_olivia_theater.txt", "expected_category": "registration"},
-  {"id": "triage_reg_06", "file": "tests/test_cases/case_06_noah_coding.txt", "expected_category": "registration"},
-  {"id": "triage_reg_07", "file": "tests/test_cases/case_07_emma_preschool.txt", "expected_category": "registration"},
-  {"id": "triage_reg_08", "file": "tests/test_cases/case_08_lucas_tennis.txt", "expected_category": "registration"},
-  {"id": "triage_reg_09", "file": "tests/test_cases/case_09_ava_leadership.txt", "expected_category": "registration"},
-  {"id": "triage_reg_10", "file": "tests/test_cases/case_10_ethan_basketball.txt", "expected_category": "registration"},
+  {"id": "triage_reg_01", "file": "tests/test_cases/case_01_pat_soccer.txt", "expected_category": "registration"},
+  {"id": "triage_reg_02", "file": "tests/test_cases/case_02_sam_robotics.txt", "expected_category": "registration"},
+  {"id": "triage_reg_03", "file": "tests/test_cases/case_03_alex_art.txt", "expected_category": "registration"},
+  {"id": "triage_reg_04", "file": "tests/test_cases/case_04_jordan_wilderness.txt", "expected_category": "registration"},
+  {"id": "triage_reg_05", "file": "tests/test_cases/case_05_riley_theater.txt", "expected_category": "registration"},
+  {"id": "triage_reg_06", "file": "tests/test_cases/case_06_casey_coding.txt", "expected_category": "registration"},
+  {"id": "triage_reg_07", "file": "tests/test_cases/case_07_quinn_preschool.txt", "expected_category": "registration"},
+  {"id": "triage_reg_08", "file": "tests/test_cases/case_08_morgan_tennis.txt", "expected_category": "registration"},
+  {"id": "triage_reg_09", "file": "tests/test_cases/case_09_taylor_leadership.txt", "expected_category": "registration"},
+  {"id": "triage_reg_10", "file": "tests/test_cases/case_10_reese_basketball.txt", "expected_category": "registration"},
   {
     "id": "triage_dis_01",
-    "text": "Hi Sarah, so sorry for the late notice but I woke up with a fever and won't be able to watch the kids tomorrow, Tuesday July 7th. Hopefully I'll be back on my feet by Wednesday. - Jessica",
+    "text": "Hi Dana, so sorry for the late notice but I woke up with a fever and won't be able to watch the kids tomorrow, Tuesday July 7th. Hopefully I'll be back on my feet by Wednesday. - Avery",
     "expected_category": "disruption"
   },
   {
@@ -26,7 +26,7 @@
   },
   {
     "id": "triage_dis_04",
-    "text": "Heads up - David texted that his car broke down and he can't do the Thursday afternoon sitting shift this week (July 23rd). He says he can make it up next week.",
+    "text": "Heads up - Drew texted that his car broke down and he can't do the Thursday afternoon sitting shift this week (July 23rd). He says he can make it up next week.",
     "expected_category": "disruption"
   },
   {
@@ -41,7 +41,7 @@
   },
   {
     "id": "triage_gen_02",
-    "text": "Hi Sarah, it was lovely to see you at the park on Saturday! We should get the kids together for a playdate sometime soon. Let me know what your summer looks like. - Amanda",
+    "text": "Hi Dana, it was lovely to see you at the park on Saturday! We should get the kids together for a playdate sometime soon. Let me know what your summer looks like. - Amanda",
     "expected_category": "general"
   },
   {

@@ -1,5 +1,5 @@
 From: Sci-Tech Discovery Center <bookings@scitechdiscovery.org>
-To: John Smith <john.smith@example.com>
+To: Jamie Smith <jamie.smith@example.com>
 Subject: Booking Confirmation: Astro Academy Robotics Camp
 Date: Tue, 16 Jun 2026 14:30:10 -0400
 
@@ -14,7 +14,7 @@ Order ID: ST-2026-990812
 Date Processed: June 16, 2026
 
 Attendee Information:
-Name: Jack Smith
+Name: Sam Smith
 Age: 8
 
 Camp Details:
@@ -25,9 +25,9 @@ Location: Science Museum, Room 204
 Address: 100 Innovation Blvd, Springville
 
 Authorized Pick-up List:
-- John Smith
-- Sarah Smith
-- Jessica (Nanny) - Ph: 555-010-0003
+- Jamie Smith
+- Dana Smith
+- Avery (Nanny) - Ph: 555-010-0003
 
 Payment Summary:
 Base Tuition: $375.00
