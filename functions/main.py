@@ -96,7 +96,7 @@ def deserialize_session_events(events_data: List[Dict[str, Any]]) -> List[Any]:
 @https_fn.on_request(
     timeout_sec=300,
     memory=options.MemoryOption.GB_1,
-    secrets=["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]
+    secrets=["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "WANDB_API_KEY"]
 )
 def api(req: https_fn.Request) -> https_fn.Response:
     """Main API router for Firebase Cloud Functions."""

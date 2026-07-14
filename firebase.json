@@ -8,7 +8,7 @@
       "codebase": "default",
       "runtime": "python312",
       "predeploy": [
-        "python3 bin/predeploy.py"
+        "python3 bin/predeploy.py || python bin/predeploy.py"
       ],
       "ignore": [
         "venv",

@@ -1,0 +1,61 @@
+---
+description: Local dev environment gotchas for InSummery (venvs, GCP project, OAuth, Weave)
+alwaysApply: true
+---
+
+# Local Dev Environment Gotchas
+
+Learned the hard way debugging local setup — check these before assuming code is broken.
+
+## Two separate virtualenvs
+
+- Root `.venv` — for `bin/insummery`, `app/mcp_server.py`, pytest, evals.
+- `functions/venv` — a **separate** venv Firebase's emulator creates from
+  `functions/requirements.txt`. Going stale here causes emulator function-load
+  failures like `ModuleNotFoundError: No module named 'opentelemetry.instrumentation'`.
+  Fix: `.\functions\venv\Scripts\python.exe -m pip install -r functions\requirements.txt`.
+- On Windows, a bare `python` on `PATH` may resolve to a global install, not
+  `.venv`. Always activate `.venv\Scripts\Activate.ps1` first, or invoke
+  `.venv\Scripts\python.exe` explicitly. Symptom of forgetting: missing-module
+  errors for packages that ARE installed in `.venv`.
+- After adding a dependency to `pyproject.toml`, rerun
+  `.\.venv\Scripts\python.exe -m pip install -e .` — it doesn't happen automatically.
+
+## `.env` files (all gitignored, none committed)
+
+- Root `.env` — loaded automatically by `app/cli.py` and `app/mcp_server.py`
+  via `python-dotenv` (added explicitly; not automatic in a fresh repo).
+- `functions/.env.local` — loaded automatically by `firebase emulators:start`
+  for the Functions emulator only.
+- Templates live in `.env.example` at the repo root.
+
+## GCP project ID: `in-summery`, not `insummery-ai`
+
+- The real GCP project (Vertex AI, OAuth clients, Secret Manager) is
+  **`in-summery`**.
+- `insummery-ai` is only a Firebase emulator placeholder from `.firebaserc` —
+  it doesn't necessarily exist as a real GCP project. Don't `gcloud config set
+  project insummery-ai` or set `GOOGLE_CLOUD_PROJECT=insummery-ai`; use
+  `in-summery`.
+- Vertex AI needs ADC, not an API key: `gcloud auth application-default login`
+  then `gcloud auth application-default set-quota-project in-summery`.
+
+## Google Calendar OAuth: two flows need two client types
+
+- CLI/MCP (`app/mcp_server.py`, `InstalledAppFlow.run_local_server`) needs a
+  **Desktop app** OAuth client (loopback redirect is implicit, nothing to
+  register). Credentials go in root `.env`.
+- Web app via Firebase emulator (`functions/main.py`) needs a **Web
+  application** OAuth client with
+  `http://localhost:5000/api/oauth/google-calendar/callback` registered under
+  Authorized redirect URIs, or you'll hit `Error 400: redirect_uri_mismatch`.
+  Credentials go in `functions/.env.local`.
+
+## Weave/W&B
+
+- `WEAVE_PROJECT` must be `entity/project` (e.g. `your-wandb-entity/insummery-ai`),
+  not just the project name — find your entity at wandb.ai.
+- The project doesn't need to be pre-created in the W&B UI; `weave.init()`
+  creates it automatically under that entity on first successful run.
+
+See `README.md` for the full setup walkthroughs these notes summarize.

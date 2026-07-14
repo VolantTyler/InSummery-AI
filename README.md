@@ -63,6 +63,23 @@ source .venv/bin/activate
 pip install -e .
 ```
 
+> **Always use the venv's Python explicitly, or activate it first.** On
+> Windows, a bare `python` on `PATH` can resolve to a different, global
+> Python install that doesn't have this project's dependencies — you'll see
+> errors like `ModuleNotFoundError: No module named 'opentelemetry.instrumentation'`
+> or `No module named 'weave'`. Either run
+> `.\.venv\Scripts\Activate.ps1` once per terminal session, or invoke
+> `.\.venv\Scripts\python.exe bin\insummery ...` directly.
+
+### 3. Local Credentials (`.env`)
+
+Copy `.env.example` to a root-level `.env` file and fill in the values you
+need (Google Calendar OAuth, Vertex AI/Gemini, Weave — see the sections
+below for each). This file is gitignored and is loaded automatically by
+`app/cli.py` and `app/mcp_server.py` via `python-dotenv`, regardless of the
+directory you run commands from — no manual `$env:` exports or shell
+sourcing required.
+
 ---
 
 ## How to Run the Project
@@ -112,6 +129,16 @@ In web mode, the application runs a local Firebase emulator suite (Auth, Firesto
    - **Cloud Functions** at `http://localhost:5001`
    - **Firestore** at `http://localhost:8080` / Emulator UI at `http://localhost:4000`
 
+   > **Note:** the Functions emulator uses a **separate virtualenv** at
+   > `functions/venv` (distinct from the root `.venv`), created from
+   > `functions/requirements.txt`. If it's stale (e.g. after adding a new
+   > dependency there) you'll see the emulator fail to load any function with
+   > errors like `ModuleNotFoundError: No module named 'opentelemetry.instrumentation'`.
+   > Fix it with:
+   > ```bash
+   > .\functions\venv\Scripts\python.exe -m pip install -r functions\requirements.txt
+   > ```
+
 3. **Access the Web Dashboard**:
    Open your browser and navigate to `http://localhost:5000/`.
 
@@ -143,6 +170,59 @@ not been initialized for the project yet. To fix it:
 
 No code or config changes are needed after this — the error is entirely a
 project-console setting.
+
+---
+
+## Google Calendar OAuth Testing (Local)
+
+Google Calendar sync uses **two different OAuth flows locally**, and each
+needs its own OAuth client configured in
+[Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+(project `in-summery`) with a matching `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`
+pair:
+
+| Path | Client type | Where credentials go | Redirect URI |
+|---|---|---|---|
+| CLI / MCP (`app/mcp_server.py`, `InstalledAppFlow`) | **Desktop app** | root `.env` | none to register — loopback `http://localhost:<random-port>/` is allowed automatically for Desktop clients |
+| Web app via Firebase emulator (`functions/main.py`) | **Web application** | `functions/.env.local` | `http://localhost:5000/api/oauth/google-calendar/callback` (add under **Authorized redirect URIs** on that client) |
+
+Both `.env` and `functions/.env.local` are gitignored. If you see
+`Error 400: redirect_uri_mismatch` in the browser during the web flow, the
+redirect URI above hasn't been added to the Web application client yet;
+changes can take a few minutes to propagate.
+
+## Vertex AI Setup (Local)
+
+The default local model is `vertex_ai/gemini-2.5-flash` (see
+`GEMINI_MODEL`/`resolve_model_spec()` in `app/model_client.py`). Unlike the
+Gemini Developer API (AI Studio), **Vertex AI does not use a simple
+`GEMINI_API_KEY` string** — it authenticates via Application Default
+Credentials (ADC) against a real GCP project.
+
+1. Log in and select a quota project (use your real GCP project ID, e.g.
+   `in-summery` — check with `gcloud projects list` if unsure; this is **not**
+   necessarily the same as the Firebase alias in `.firebaserc`, which may be a
+   local-only placeholder):
+   ```bash
+   gcloud auth application-default login
+   gcloud auth application-default set-quota-project in-summery
+   ```
+2. Ensure the Vertex AI API is enabled on that project:
+   ```bash
+   gcloud services enable aiplatform.googleapis.com --project=in-summery
+   ```
+3. Set in your root `.env`:
+   ```bash
+   GOOGLE_CLOUD_PROJECT=in-summery
+   GOOGLE_CLOUD_LOCATION=us-central1
+   ```
+
+If instead you want to use the Gemini Developer API (AI Studio) rather than
+Vertex AI, set `GEMINI_MODEL=gemini/gemini-2.5-flash` and `GEMINI_API_KEY`
+(from [Google AI Studio](https://aistudio.google.com/apikey), **not** a
+Google Cloud Console API key like a Firebase browser key — those are for
+client-side Firebase SDK calls, not LLM inference) instead of steps 1-3
+above.
 
 ---
 
@@ -223,6 +303,12 @@ masked agent inputs plus summarized workflow/evaluation metadata. The
 existing `PIIMasker` remains the primary privacy boundary before LLM calls. For
 deployed Firebase Cloud Functions, configure `WANDB_API_KEY` and `WEAVE_PROJECT`
 as backend secrets/environment variables rather than frontend build variables.
+
+Note that `WEAVE_PROJECT` must include your W&B entity/team, not just the
+project name (`your-entity/insummery-ai`, not just `insummery-ai`) — find
+your entity at [wandb.ai](https://wandb.ai) under your account/team name. You
+don't need to pre-create the project in the W&B UI: `weave.init()` creates it
+automatically under that entity on the first successful run.
 
 ---
 
