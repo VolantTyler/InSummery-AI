@@ -28,6 +28,7 @@ from google_auth_oauthlib.flow import Flow
 
 from app.agent import insummery_workflow
 from app.storage import FirestoreStorageProvider
+from app.workflow_trace import emit_hitl_feedback, emit_workflow_trace
 
 # Initialize Firebase Admin
 if os.getenv("FIRESTORE_EMULATOR_HOST") or os.getenv("FIREBASE_AUTH_EMULATOR_HOST"):
@@ -155,12 +156,15 @@ def _route_request(req: https_fn.Request) -> https_fn.Response:
         return https_fn.Response(json.dumps({"error": "Not Found"}), status=404, headers=headers, mimetype="application/json")
 
 def handle_process_email(req: https_fn.Request, user_id: str, headers: dict) -> https_fn.Response:
+    import time
+
     data = req.get_json() or {}
     email_text = data.get("text", "")
     if not email_text:
         return https_fn.Response(json.dumps({"error": "Missing text parameter"}), status=400, headers=headers, mimetype="application/json")
 
     session_id = data.get("sessionId") or f"session_{int(datetime.now().timestamp())}"
+    started_at = time.monotonic()
     
     # Run the workflow
     session_service = InMemorySessionService()
@@ -178,11 +182,31 @@ def handle_process_email(req: https_fn.Request, user_id: str, headers: dict) -> 
     res_gen = runner.run(user_id=user_id, session_id=session_id, new_message=msg, state_delta=state_delta)
     
     events = list(res_gen)
+
+    for event in events:
+        if getattr(event, "error_code", None):
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(emit_workflow_trace(
+                    status="ERROR",
+                    started_at=started_at,
+                    error_code=str(event.error_code),
+                ))
+            finally:
+                loop.close()
+            return https_fn.Response(
+                json.dumps({
+                    "status": "ERROR",
+                    "error": f"[{event.error_code}] {event.error_message}",
+                }),
+                status=500,
+                headers=headers,
+                mimetype="application/json",
+            )
     
     # Retrieve the session to check if it's interrupted
     loop = asyncio.new_event_loop()
     session = loop.run_until_complete(session_service.get_session(user_id=user_id, session_id=session_id, app_name="insummery_app"))
-    loop.close()
     
     # Check for RequestInput
     pending_interrupt = None
@@ -205,6 +229,16 @@ def handle_process_email(req: https_fn.Request, user_id: str, headers: dict) -> 
             "message": pending_interrupt.args.get("message", "Clarification needed.")
         }
         storage.save_pending_workflow(user_id, session_id, state_to_save)
+
+        try:
+            loop.run_until_complete(emit_workflow_trace(
+                status="INTERRUPTED",
+                state=dict(session.state or {}),
+                started_at=started_at,
+                hitl=True,
+            ))
+        finally:
+            loop.close()
         
         return https_fn.Response(
             json.dumps({
@@ -219,6 +253,15 @@ def handle_process_email(req: https_fn.Request, user_id: str, headers: dict) -> 
     
     # Successful completion, return updated matrix
     matrix = storage.get_matrix(user_id) or {"activities": [], "gaps": []}
+    try:
+        loop.run_until_complete(emit_workflow_trace(
+            status="COMPLETED",
+            state=dict(session.state or {}),
+            matrix=matrix,
+            started_at=started_at,
+        ))
+    finally:
+        loop.close()
     return https_fn.Response(
         json.dumps({
             "status": "COMPLETED",
@@ -230,9 +273,12 @@ def handle_process_email(req: https_fn.Request, user_id: str, headers: dict) -> 
     )
 
 def handle_resume_workflow(req: https_fn.Request, user_id: str, headers: dict) -> https_fn.Response:
+    import time
+
     data = req.get_json() or {}
     workflow_id = data.get("workflowId")
     user_response = data.get("response")
+    started_at = time.monotonic()
     
     if not workflow_id or not user_response:
         return https_fn.Response(json.dumps({"error": "Missing workflowId or response"}), status=400, headers=headers, mimetype="application/json")
@@ -260,7 +306,6 @@ def handle_resume_workflow(req: https_fn.Request, user_id: str, headers: dict) -
     session = loop.run_until_complete(session_service.get_session(user_id=user_id, session_id=session_id, app_name="insummery_app"))
     for event in deserialized_events:
         loop.run_until_complete(session_service.append_event(session, event))
-    loop.close()
 
     runner = Runner(
         agent=insummery_workflow,
@@ -281,6 +326,32 @@ def handle_resume_workflow(req: https_fn.Request, user_id: str, headers: dict) -
     res_gen = runner.run(user_id=user_id, session_id=session_id, new_message=msg)
     events = list(res_gen)
 
+    for event in events:
+        if getattr(event, "error_code", None):
+            try:
+                loop.run_until_complete(emit_hitl_feedback(
+                    workflow_id=workflow_id,
+                    clarification=user_response,
+                    status="ERROR",
+                ))
+                loop.run_until_complete(emit_workflow_trace(
+                    status="ERROR",
+                    started_at=started_at,
+                    error_code=str(event.error_code),
+                    hitl=True,
+                ))
+            finally:
+                loop.close()
+            return https_fn.Response(
+                json.dumps({
+                    "status": "ERROR",
+                    "error": f"[{event.error_code}] {event.error_message}",
+                }),
+                status=500,
+                headers=headers,
+                mimetype="application/json",
+            )
+
     # Check if still interrupted
     pending_interrupt = None
     for event in events:
@@ -292,15 +363,29 @@ def handle_resume_workflow(req: https_fn.Request, user_id: str, headers: dict) -
 
     if pending_interrupt:
         # Save updated events
-        loop = asyncio.new_event_loop()
         session = loop.run_until_complete(session_service.get_session(user_id=user_id, session_id=session_id, app_name="insummery_app"))
-        loop.close()
         
         serialized_events = serialize_session_events(session)
         saved_state["events"] = serialized_events
         saved_state["interrupt_id"] = pending_interrupt.id
         saved_state["message"] = pending_interrupt.args.get("message")
         storage.save_pending_workflow(user_id, workflow_id, saved_state)
+
+        try:
+            loop.run_until_complete(emit_hitl_feedback(
+                workflow_id=workflow_id,
+                clarification=user_response,
+                status="INTERRUPTED",
+                state=dict(session.state or {}),
+            ))
+            loop.run_until_complete(emit_workflow_trace(
+                status="INTERRUPTED",
+                state=dict(session.state or {}),
+                started_at=started_at,
+                hitl=True,
+            ))
+        finally:
+            loop.close()
         
         return https_fn.Response(
             json.dumps({
@@ -317,7 +402,24 @@ def handle_resume_workflow(req: https_fn.Request, user_id: str, headers: dict) -
     # Delete the pending workflow document
     get_db().collection("users").document(user_id).collection("pending_workflows").document(workflow_id).delete()
     
+    session = loop.run_until_complete(session_service.get_session(user_id=user_id, session_id=session_id, app_name="insummery_app"))
     matrix = storage.get_matrix(user_id) or {"activities": [], "gaps": []}
+    try:
+        loop.run_until_complete(emit_hitl_feedback(
+            workflow_id=workflow_id,
+            clarification=user_response,
+            status="COMPLETED",
+            state=dict(session.state or {}),
+        ))
+        loop.run_until_complete(emit_workflow_trace(
+            status="COMPLETED",
+            state=dict(session.state or {}),
+            matrix=matrix,
+            started_at=started_at,
+            hitl=True,
+        ))
+    finally:
+        loop.close()
     return https_fn.Response(
         json.dumps({
             "status": "COMPLETED",

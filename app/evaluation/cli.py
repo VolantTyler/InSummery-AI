@@ -4,7 +4,9 @@ Usage:
     insummery-eval run                # run all suites, gate on thresholds + baseline
     insummery-eval run --suites workflow      # end-to-end workflow suite only
     insummery-eval run --json-out report.json
+    insummery-eval run --weave-publish        # also mirror report into Weave Evaluations
     insummery-eval baseline           # run all suites and (re)write the baseline
+    insummery-eval weave-monitors     # publish/activate production Weave monitors
 """
 import argparse
 import asyncio
@@ -25,6 +27,8 @@ from app.evaluation.baseline import (
     load_baseline,
     compare_to_baseline,
 )
+from app.evaluation.weave_publish import publish_eval_report
+from app.weave_monitors import ensure_production_monitors
 
 
 def _print_report(report: dict) -> None:
@@ -78,6 +82,23 @@ def _run_report(harness: EvalHarness, suites=None) -> dict:
         raise
 
 
+def _maybe_publish_weave(report: dict, enabled: bool) -> None:
+    if not enabled:
+        return
+    result = publish_eval_report(report)
+    if not result.get("ok"):
+        print(
+            f"NOTE: Weave publish skipped ({result.get('reason', 'unknown')}). "
+            "Set WANDB_API_KEY and WEAVE_DISABLED=false to enable."
+        )
+        return
+    url = result.get("ui_url")
+    if url:
+        print(f"Weave evaluation published: {url}")
+    else:
+        print(f"Weave evaluation published: {result.get('name')}")
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     harness = EvalHarness(config_path=args.config)
     suites = args.suites or None
@@ -89,6 +110,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         with open(args.json_out, "w", encoding="utf-8") as f:
             json.dump(report, f, indent=2)
         print(f"Full report written to {args.json_out}")
+
+    _maybe_publish_weave(report, args.weave_publish)
 
     failures = harness.check_thresholds(report)
 
@@ -133,6 +156,7 @@ def cmd_baseline(args: argparse.Namespace) -> int:
 
     report = _run_report(harness)
     _print_report(report)
+    _maybe_publish_weave(report, args.weave_publish)
 
     failures = harness.check_thresholds(report)
     if failures and not args.force:
@@ -144,6 +168,32 @@ def cmd_baseline(args: argparse.Namespace) -> int:
 
     path = save_baseline(report, harness.config, harness.root)
     print(f"Baseline saved to {path}")
+    return 0
+
+
+def cmd_weave_monitors(args: argparse.Namespace) -> int:
+    """Publish/activate Weave Monitors for production soft-failure signals."""
+    result = ensure_production_monitors(
+        activate=not args.deactivate,
+        dry_run=args.dry_run,
+    )
+    if not result.get("ok"):
+        print(
+            f"Weave monitors skipped ({result.get('reason', 'unknown')}). "
+            "Set WANDB_API_KEY and WEAVE_DISABLED=false to enable."
+        )
+        return 2
+
+    mode = "dry-run" if result.get("dry_run") else (
+        "activated" if result.get("activate") else "published"
+    )
+    print(f"Weave monitors ({mode}):")
+    for name in result.get("monitors") or []:
+        print(f"  - {name}")
+    print(
+        "\nNote: Weave Monitors score LLM/workflow soft failures. "
+        "Use GCP Cloud Monitoring for HTTP 5xx / function uptime."
+    )
     return 0
 
 
@@ -174,6 +224,11 @@ def main() -> None:
         action="store_true",
         help="Skip the regression comparison against the stored baseline",
     )
+    run_p.add_argument(
+        "--weave-publish",
+        action="store_true",
+        help="Mirror the finished report into a Weave Evaluation (requires WANDB_API_KEY)",
+    )
     run_p.set_defaults(func=cmd_run)
 
     base_p = sub.add_parser("baseline", help="Run evals and save the result as the baseline")
@@ -182,7 +237,28 @@ def main() -> None:
         action="store_true",
         help="Save the baseline even if absolute thresholds are not met",
     )
+    base_p.add_argument(
+        "--weave-publish",
+        action="store_true",
+        help="Also mirror the baseline report into a Weave Evaluation",
+    )
     base_p.set_defaults(func=cmd_baseline)
+
+    mon_p = sub.add_parser(
+        "weave-monitors",
+        help="Publish/activate Weave Monitors for production soft-failure scoring",
+    )
+    mon_p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print monitor names without publishing or activating",
+    )
+    mon_p.add_argument(
+        "--deactivate",
+        action="store_true",
+        help="Publish monitor definitions without activating them",
+    )
+    mon_p.set_defaults(func=cmd_weave_monitors)
 
     args = parser.parse_args()
     sys.exit(args.func(args))

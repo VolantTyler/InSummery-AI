@@ -3,6 +3,7 @@ import sys
 import argparse
 import asyncio
 import json
+import time
 import webbrowser
 from datetime import datetime
 from dotenv import load_dotenv
@@ -22,6 +23,7 @@ from google.genai.types import Content, Part, FunctionResponse
 from app.agent import insummery_workflow
 from app.storage import LocalStorageProvider
 from app.ui_generator import generate_html_grid
+from app.workflow_trace import emit_hitl_feedback, emit_workflow_trace
 
 def get_session_events_serialized(session) -> list:
     serialized = []
@@ -43,6 +45,7 @@ async def run_local_workflow(text: str, is_disruption: bool) -> None:
     storage = LocalStorageProvider()
     user_id = "local_user"
     session_id = f"session_{int(datetime.now().timestamp())}"
+    started_at = time.monotonic()
     
     session_service = InMemorySessionService()
     runner = Runner(
@@ -66,6 +69,11 @@ async def run_local_workflow(text: str, is_disruption: bool) -> None:
     for event in events:
         if event.error_code:
             print(f"\nError: Workflow execution failed: [{event.error_code}] {event.error_message}")
+            await emit_workflow_trace(
+                status="ERROR",
+                started_at=started_at,
+                error_code=str(event.error_code),
+            )
             return
 
     session = await session_service.get_session(user_id=user_id, session_id=session_id, app_name="insummery_app")
@@ -90,6 +98,12 @@ async def run_local_workflow(text: str, is_disruption: bool) -> None:
         }
         storage.save_pending_workflow(user_id, session_id, state_to_save)
         
+        await emit_workflow_trace(
+            status="INTERRUPTED",
+            state=dict(session.state or {}),
+            started_at=started_at,
+            hitl=True,
+        )
         print("\n=== CLARIFICATION REQUIRED (PAUSED) ===")
         print(f"Workflow ID: {session_id}")
         print(f"Question: {pending_interrupt.args.get('message')}")
@@ -98,6 +112,12 @@ async def run_local_workflow(text: str, is_disruption: bool) -> None:
 
     # Success! Generate and open UI
     matrix = storage.get_matrix(user_id) or {"activities": [], "gaps": []}
+    await emit_workflow_trace(
+        status="COMPLETED",
+        state=dict(session.state or {}),
+        matrix=matrix,
+        started_at=started_at,
+    )
     profile = storage.get_profile(user_id) or {}
     output_path = os.path.abspath(os.path.join(".", "output", "schedule.html"))
     
@@ -118,6 +138,7 @@ def _print_run_outcome(matrix: dict) -> None:
 async def resume_local_workflow(workflow_id: str, response: str) -> None:
     storage = LocalStorageProvider()
     user_id = "local_user"
+    started_at = time.monotonic()
     
     saved_state = storage.get_pending_workflow(user_id, workflow_id)
     if not saved_state:
@@ -155,6 +176,17 @@ async def resume_local_workflow(workflow_id: str, response: str) -> None:
     for event in events:
         if event.error_code:
             print(f"\nError: Workflow resumption failed: [{event.error_code}] {event.error_message}")
+            await emit_hitl_feedback(
+                workflow_id=workflow_id,
+                clarification=response,
+                status="ERROR",
+            )
+            await emit_workflow_trace(
+                status="ERROR",
+                started_at=started_at,
+                error_code=str(event.error_code),
+                hitl=True,
+            )
             return
             
     # Check if still interrupted
@@ -175,6 +207,18 @@ async def resume_local_workflow(workflow_id: str, response: str) -> None:
         saved_state["message"] = pending_interrupt.args.get("message")
         storage.save_pending_workflow(user_id, workflow_id, saved_state)
         
+        await emit_hitl_feedback(
+            workflow_id=workflow_id,
+            clarification=response,
+            status="INTERRUPTED",
+            state=dict(updated_session.state or {}),
+        )
+        await emit_workflow_trace(
+            status="INTERRUPTED",
+            state=dict(updated_session.state or {}),
+            started_at=started_at,
+            hitl=True,
+        )
         print("\n=== CLARIFICATION REQUIRED (PAUSED) ===")
         print(f"Workflow ID: {workflow_id}")
         print(f"Question: {pending_interrupt.args.get('message')}")
@@ -192,7 +236,23 @@ async def resume_local_workflow(workflow_id: str, response: str) -> None:
             json.dump(workflows, f, indent=2, ensure_ascii=False)
             
     # Generate and open UI
+    completed_session = await session_service.get_session(
+        user_id=user_id, session_id=session_id, app_name="insummery_app"
+    )
     matrix = storage.get_matrix(user_id) or {"activities": [], "gaps": []}
+    await emit_hitl_feedback(
+        workflow_id=workflow_id,
+        clarification=response,
+        status="COMPLETED",
+        state=dict(completed_session.state or {}),
+    )
+    await emit_workflow_trace(
+        status="COMPLETED",
+        state=dict(completed_session.state or {}),
+        matrix=matrix,
+        started_at=started_at,
+        hitl=True,
+    )
     profile = storage.get_profile(user_id) or {}
     output_path = os.path.abspath(os.path.join(".", "output", "schedule.html"))
     
