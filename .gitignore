@@ -135,3 +135,6 @@ tests/eval/baselines/local/
 
 # Generated Firebase Cloud Functions dependencies
 functions/app/
+
+# Local HITL feedback dataset growth (sanitized; never commit)
+data/hitl_feedback_cases.json
