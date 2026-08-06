@@ -54,9 +54,11 @@ def setup_weave() -> bool:
 
     import logging
 
+    import wandb
     import weave
 
     project = os.getenv("WEAVE_PROJECT", "insummery-ai")
+    api_key = (os.getenv("WANDB_API_KEY") or "").strip()
     # implicitly_patch_integrations=False keeps Weave from auto-tracing the
     # Google ADK / GenAI SDKs. The workflow receives the *raw* email as
     # `new_message` and only masks it inside pii_mask_node, so automatic ADK
@@ -64,6 +66,10 @@ def setup_weave() -> bool:
     # data Weave receives is what the explicit helpers below record, all of
     # which is masked or summarized metadata.
     try:
+        # Explicit login avoids "not logged in" when the key is in .env but
+        # Weave/wandb did not pick up ambient credentials (common on Windows).
+        if api_key:
+            wandb.login(key=api_key, relogin=True, anonymous="never")
         weave.init(
             project,
             settings={

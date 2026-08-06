@@ -19,11 +19,15 @@ def reset_initialized_flag(monkeypatch):
 
 @pytest.fixture
 def fake_weave(monkeypatch):
-    """Stub the weave module so tests need no W&B credential or network."""
+    """Stub weave + wandb.login so tests need no W&B credential or network."""
     calls = []
-    module = types.ModuleType("weave")
-    module.init = lambda project, **kwargs: calls.append((project, kwargs))
-    monkeypatch.setitem(sys.modules, "weave", module)
+    weave_module = types.ModuleType("weave")
+    weave_module.init = lambda project, **kwargs: calls.append((project, kwargs))
+    monkeypatch.setitem(sys.modules, "weave", weave_module)
+
+    wandb_module = types.ModuleType("wandb")
+    wandb_module.login = lambda **kwargs: True
+    monkeypatch.setitem(sys.modules, "wandb", wandb_module)
     return calls
 
 
