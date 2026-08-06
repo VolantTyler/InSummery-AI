@@ -292,3 +292,45 @@ def test_build_monitors_when_weave_available(monkeypatch):
     assert "insummery-workflow-health" in names
     assert "insummery-guardrail-pass" in names
     assert "insummery-confidence-gate" in names
+    assert "insummery-client-perf" in names
+
+
+def test_sanitize_client_perf_allowlists_and_budgets():
+    clean = wo.sanitize_client_perf(
+        {
+            "view": "auth",
+            "source": "web-vitals",
+            "path": "/auth?email=secret@example.com",
+            "session_id": "s_abc12345",
+            "fcp": 900.4,
+            "lcp": 1200,
+            "time_to_paint": 400,
+            "cls": 0.0123,
+            "rating": "good",
+            "email": "drop-me@example.com",
+            "raw_html": "<script>",
+        }
+    )
+    assert clean["view"] == "auth"
+    assert clean["path"] == "/auth"
+    assert "email" not in clean
+    assert "raw_html" not in clean
+    assert clean["fcp"] == 900.4
+    assert clean["cls"] == 0.012
+    assert clean["within_budget"] is True
+
+
+def test_sanitize_client_perf_marks_budget_miss():
+    clean = wo.sanitize_client_perf({"view": "dashboard", "lcp": 5000, "fcp": 100})
+    assert clean["within_budget"] is False
+
+
+def test_trace_client_perf_noop_without_weave():
+    payload = asyncio.run(
+        wo.trace_client_perf(
+            {"view": "boot", "source": "test", "time_to_paint": 150, "fcp": 200}
+        )
+    )
+    assert payload["view"] == "boot"
+    assert payload["time_to_paint"] == 150.0
+    assert payload["within_budget"] is True

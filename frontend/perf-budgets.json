@@ -1,0 +1,10 @@
+{
+  "description": "Page-load budgets for the auth shell (mock Firebase build). Fail CI on regression.",
+  "auth": {
+    "time_to_paint_ms": 2000,
+    "first_contentful_paint_ms": 2500,
+    "largest_contentful_paint_ms": 4000,
+    "dom_content_loaded_ms": 3000,
+    "ttfb_ms": 800
+  }
+}

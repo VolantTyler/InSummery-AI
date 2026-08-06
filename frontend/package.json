@@ -6,14 +6,19 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "build:perf": "VITE_FIREBASE_API_KEY=mock-api-key VITE_GA_MEASUREMENT_ID= VITE_CLIENT_METRICS_ENABLED=false vite build",
+    "preview": "vite preview",
+    "test:perf": "npm run build:perf && playwright test",
+    "test:perf:ui": "npm run build:perf && playwright test --ui"
   },
   "dependencies": {
     "firebase": "^11.10.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "web-vitals": "4.2.4"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
     "@vitejs/plugin-react": "^4.5.0",
     "vite": "^7.0.0"
   }

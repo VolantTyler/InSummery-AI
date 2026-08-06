@@ -54,6 +54,16 @@ jobs:
           cd frontend
           npm run build
 
+      - name: Install Playwright Chromium
+        run: |
+          cd frontend
+          npx playwright install --with-deps chromium
+
+      - name: Run Frontend Page-Load Perf Budgets
+        run: |
+          cd frontend
+          npm run test:perf
+
   deploy:
     name: Deploy to Firebase
     needs: test-and-lint

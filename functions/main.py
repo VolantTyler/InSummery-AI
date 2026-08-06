@@ -29,6 +29,7 @@ from google_auth_oauthlib.flow import Flow
 from app.agent import insummery_workflow
 from app.storage import FirestoreStorageProvider
 from app.workflow_trace import emit_hitl_feedback, emit_workflow_trace
+from app.weave_observability import sanitize_client_perf, trace_client_perf
 
 # Initialize Firebase Admin
 if os.getenv("FIRESTORE_EMULATOR_HOST") or os.getenv("FIREBASE_AUTH_EMULATOR_HOST"):
@@ -125,11 +126,15 @@ def _route_request(req: https_fn.Request) -> https_fn.Response:
 
     headers = {"Access-Control-Allow-Origin": "*"}
 
-    path = req.path.replace("/api", "")
+    path = req.path.replace("/api", "", 1) if req.path.startswith("/api") else req.path
 
     # Bypass authentication for Google Calendar OAuth Callback
     if path == "/oauth/google-calendar/callback" and req.method == "GET":
         return handle_oauth_callback(req, headers)
+
+    # Anonymous, PII-safe page-load metrics for GA correlation + Weave monitors.
+    if path == "/client-metrics" and req.method == "POST":
+        return handle_client_metrics(req, headers)
 
     try:
         user_id = verify_auth_token(req)
@@ -154,6 +159,48 @@ def _route_request(req: https_fn.Request) -> https_fn.Response:
         return handle_oauth_start(req, user_id, headers)
     else:
         return https_fn.Response(json.dumps({"error": "Not Found"}), status=404, headers=headers, mimetype="application/json")
+
+
+def handle_client_metrics(req: https_fn.Request, headers: dict) -> https_fn.Response:
+    """Accept sanitized browser page-load metrics and record them in Weave.
+
+    Unauthenticated by design (metrics fire before login). Payload is
+    allowlisted in ``sanitize_client_perf`` — no email bodies or tokens.
+    """
+    raw = req.get_json(silent=True)
+    if not isinstance(raw, dict):
+        return https_fn.Response(
+            json.dumps({"error": "Expected JSON object"}),
+            status=400,
+            headers=headers,
+            mimetype="application/json",
+        )
+    if len(json.dumps(raw)) > 4096:
+        return https_fn.Response(
+            json.dumps({"error": "Payload too large"}),
+            status=413,
+            headers=headers,
+            mimetype="application/json",
+        )
+
+    clean = sanitize_client_perf(raw)
+    try:
+        loop = asyncio.new_event_loop()
+        try:
+            recorded = loop.run_until_complete(trace_client_perf(clean))
+        finally:
+            loop.close()
+    except Exception as exc:  # noqa: BLE001 - metrics must not 500 the app
+        logger.warning("client-metrics weave record failed: %s", exc)
+        recorded = clean
+
+    return https_fn.Response(
+        json.dumps({"ok": True, "metrics": recorded}),
+        status=200,
+        headers=headers,
+        mimetype="application/json",
+    )
+
 
 def handle_process_email(req: https_fn.Request, user_id: str, headers: dict) -> https_fn.Response:
     import time
