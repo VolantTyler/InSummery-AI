@@ -171,20 +171,43 @@ def ensure_production_monitors(*, activate: bool = True, dry_run: bool = False) 
             "monitors": [m.name for m in monitors],
         }
 
-    setup_weave()
+    if not setup_weave():
+        return {
+            "ok": False,
+            "reason": "weave_init_failed",
+            "monitors": [],
+            "hint": (
+                "WANDB_API_KEY is set but weave.init() failed (bad/expired key, "
+                "network, or WEAVE_PROJECT). Check the key at https://wandb.ai/authorize "
+                "and that WEAVE_PROJECT is entity/project."
+            ),
+        }
+
     monitors = build_monitors()
     names = [m.name for m in monitors]
 
     activated: List[str] = []
-    for monitor in monitors:
-        if activate:
-            # activate() publishes the monitor definition to the Weave project.
-            monitor.activate()
-            activated.append(monitor.name)
-        else:
-            import weave
+    try:
+        for monitor in monitors:
+            if activate:
+                # activate() publishes the monitor definition to the Weave project.
+                monitor.activate()
+                activated.append(monitor.name)
+            else:
+                import weave
 
-            weave.publish(monitor)
+                weave.publish(monitor)
+    except Exception as exc:  # noqa: BLE001 - surface auth errors to the CLI
+        return {
+            "ok": False,
+            "reason": "weave_publish_failed",
+            "error": str(exc),
+            "monitors": activated,
+            "hint": (
+                "W&B rejected the request. Confirm WANDB_API_KEY is valid and "
+                "WEAVE_PROJECT uses your entity (wandb.ai → account/team name)."
+            ),
+        }
 
     return {
         "ok": True,

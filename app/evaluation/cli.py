@@ -11,13 +11,17 @@ Usage:
 import argparse
 import asyncio
 import json
+import os
 import sys
 
 from dotenv import load_dotenv
 
 from app.telemetry import setup_telemetry
 
-load_dotenv()
+# Load repo-root .env regardless of cwd (same pattern as app/cli.py).
+# override=True so a stale empty WANDB_API_KEY in the shell cannot mask .env.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+load_dotenv(os.path.join(_REPO_ROOT, ".env"), override=True)
 setup_telemetry()
 
 from app.evaluation.runner import EvalHarness, SUITES
@@ -178,10 +182,17 @@ def cmd_weave_monitors(args: argparse.Namespace) -> int:
         dry_run=args.dry_run,
     )
     if not result.get("ok"):
-        print(
-            f"Weave monitors skipped ({result.get('reason', 'unknown')}). "
-            "Set WANDB_API_KEY and WEAVE_DISABLED=false to enable."
-        )
+        reason = result.get("reason", "unknown")
+        print(f"Weave monitors failed ({reason}).")
+        if result.get("error"):
+            print(f"  error: {result['error']}")
+        if result.get("hint"):
+            print(f"  hint: {result['hint']}")
+        elif reason == "weave_disabled":
+            print(
+                "  Set WANDB_API_KEY and WEAVE_DISABLED=false in the repo-root .env "
+                "(and re-run from any directory — .env is loaded by absolute path)."
+            )
         return 2
 
     mode = "dry-run" if result.get("dry_run") else (
