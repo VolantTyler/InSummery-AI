@@ -318,6 +318,7 @@ Note that `WEAVE_PROJECT` must include your W&B entity/team (e.g.
 | `insummery.workflow.guardrail` | Post-interpreter structural checks |
 | `insummery.workflow.run` | End-of-run status / soft-failure summary |
 | `insummery.workflow.hitl_feedback` | Parent clarification + Call feedback |
+| `insummery.client.perf` | Browser page-load metrics via `POST /api/client-metrics` |
 | `insummery.eval.case` | Per-case eval breadcrumbs |
 
 Optional Presidio defense-in-depth on masked interpreter fields:
@@ -339,13 +340,49 @@ insummery-eval weave-monitors            # activate soft-failure monitors
 ```
 
 Weave Monitors score agent soft failures (unmatched disruptions, guardrail
-fails, HITL rate). Use GCP Cloud Monitoring for HTTP 5xx / function uptime.
+fails, HITL rate) and page-load budget misses (`insummery-client-perf`). Use
+GCP Cloud Monitoring for HTTP 5xx / function uptime.
 
 Note that `WEAVE_PROJECT` must include your W&B entity/team, not just the
 project name (`your-entity/insummery-ai`, not just `insummery-ai`) — find
 your entity at [wandb.ai](https://wandb.ai) under your account/team name. You
 don't need to pre-create the project in the W&B UI: `weave.init()` creates it
 automatically under that entity on the first successful run.
+
+## Google Analytics (frontend)
+
+Product funnel analytics use GA4 in the SPA. Set a Measurement ID in
+`frontend/.env.production` (or `.env.local`):
+
+```bash
+VITE_GA_MEASUREMENT_ID=G-XXXXXXXX
+```
+
+When set, the app loads gtag.js, records SPA view changes (`auth` /
+`onboarding` / `dashboard`), and sends Core Web Vitals. Numeric paint metrics
+are also POSTed to `/api/client-metrics` so Weave can monitor regressions
+without shipping `WANDB_API_KEY` to the browser. Leave the Measurement ID
+empty to disable GA; metrics posting can be turned off with
+`VITE_CLIENT_METRICS_ENABLED=false`.
+
+Split of concerns: GA = product funnel + web vitals; Weave = agent traces +
+client perf ops; GCP = function/HTTP health.
+
+## Cursor marketplace / MCP plugins (recommended)
+
+These bring GA and Weave context into the IDE while you work on this repo:
+
+1. **Weights & Biases MCP** (`wandb`) — query Weave traces, evals, and monitors
+   from chat. Hosted URL: `https://mcp.withwandb.com/mcp`. Copy
+   `.cursor/mcp.example.json` into your user `~/.cursor/mcp.json` (or merge
+   the `wandb` block) and replace `YOUR_WANDB_API_KEY`. Docs:
+   https://docs.wandb.ai/platform/mcp-server
+2. **Google Analytics 4 MCP** — pull GA4 reports / realtime traffic while
+   tuning events. Official server:
+   https://github.com/googleanalytics/google-analytics-mcp (or Cursor
+   Marketplace / AnythingMCP “Google Analytics 4” connector).
+3. Optional: a **PageSpeed / Lighthouse MCP** if you want ad-hoc live audits
+   alongside the Playwright budget suite below.
 
 ---
 
@@ -356,6 +393,23 @@ Run the pytest suite to verify all logic (matrix merging, gap analysis, PII mask
 ```bash
 python -m pytest
 ```
+
+### Frontend page-load budgets
+
+Playwright measures time-to-paint, FCP, LCP, TTFB, and DOMContentLoaded against
+`frontend/perf-budgets.json` (auth shell, mock Firebase build):
+
+```bash
+cd frontend
+npm ci
+npx playwright install chromium
+npm run test:perf
+```
+
+CI runs the same suite on every deploy workflow. Tighten budgets in
+`perf-budgets.json` as the shell gets faster; failing the suite means a
+regression, not a flake-friendly soft warning.
+
 
 ---
 

@@ -18,6 +18,7 @@ from app.weave_observability import setup_weave, weave_enabled
 WORKFLOW_RUN_OP = "insummery.workflow.run"
 GUARDRAIL_OP = "insummery.workflow.guardrail"
 CONFIDENCE_GATE_OP = "insummery.workflow.confidence_gate"
+CLIENT_PERF_OP = "insummery.client.perf"
 
 
 def _build_scorers():
@@ -75,14 +76,36 @@ def _build_scorers():
                 "confidence_score": output.get("confidence_score"),
             }
 
-    return WorkflowHealthScorer(), GuardrailPassScorer(), ConfidenceGateScorer()
+    class ClientPerfScorer(weave.Scorer):
+        """Score browser page-load metrics against Core Web Vitals budgets."""
+
+        @weave.op
+        def score(self, output: dict) -> dict:  # type: ignore[override]
+            if not isinstance(output, dict):
+                return {"within_budget": False}
+            return {
+                "within_budget": bool(output.get("within_budget", True)),
+                "has_lcp": output.get("lcp") is not None,
+                "has_fcp": output.get("fcp") is not None,
+                "has_ttp": output.get("time_to_paint") is not None,
+                "lcp": output.get("lcp"),
+                "fcp": output.get("fcp"),
+                "time_to_paint": output.get("time_to_paint"),
+            }
+
+    return (
+        WorkflowHealthScorer(),
+        GuardrailPassScorer(),
+        ConfidenceGateScorer(),
+        ClientPerfScorer(),
+    )
 
 
 def build_monitors() -> List[Any]:
     """Construct (inactive) Monitor objects for InSummery production ops."""
     import weave
 
-    health, guardrail, confidence = _build_scorers()
+    health, guardrail, confidence, client_perf = _build_scorers()
     return [
         weave.Monitor(
             name="insummery-workflow-health",
@@ -111,6 +134,17 @@ def build_monitors() -> List[Any]:
             scorers=[confidence],
             active=False,
         ),
+        weave.Monitor(
+            name="insummery-client-perf",
+            description=(
+                "Page-load budget monitor on client.perf: LCP/FCP/time-to-paint "
+                "regressions from the SPA."
+            ),
+            sampling_rate=1.0,
+            op_names=[CLIENT_PERF_OP],
+            scorers=[client_perf],
+            active=False,
+        ),
     ]
 
 
@@ -137,20 +171,43 @@ def ensure_production_monitors(*, activate: bool = True, dry_run: bool = False) 
             "monitors": [m.name for m in monitors],
         }
 
-    setup_weave()
+    if not setup_weave():
+        return {
+            "ok": False,
+            "reason": "weave_init_failed",
+            "monitors": [],
+            "hint": (
+                "WANDB_API_KEY is set but weave.init() failed (bad/expired key, "
+                "network, or WEAVE_PROJECT). Check the key at https://wandb.ai/authorize "
+                "and that WEAVE_PROJECT is entity/project."
+            ),
+        }
+
     monitors = build_monitors()
     names = [m.name for m in monitors]
 
     activated: List[str] = []
-    for monitor in monitors:
-        if activate:
-            # activate() publishes the monitor definition to the Weave project.
-            monitor.activate()
-            activated.append(monitor.name)
-        else:
-            import weave
+    try:
+        for monitor in monitors:
+            if activate:
+                # activate() publishes the monitor definition to the Weave project.
+                monitor.activate()
+                activated.append(monitor.name)
+            else:
+                import weave
 
-            weave.publish(monitor)
+                weave.publish(monitor)
+    except Exception as exc:  # noqa: BLE001 - surface auth errors to the CLI
+        return {
+            "ok": False,
+            "reason": "weave_publish_failed",
+            "error": str(exc),
+            "monitors": activated,
+            "hint": (
+                "W&B rejected the request. Confirm WANDB_API_KEY is valid and "
+                "WEAVE_PROJECT uses your entity (wandb.ai → account/team name)."
+            ),
+        }
 
     return {
         "ok": True,

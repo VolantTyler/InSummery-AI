@@ -31,7 +31,8 @@ jobs:
 
       - name: Run Python Linters (Syntax & Import Checks)
         run: |
-          uv run python -m compileall app functions
+          # Scope to app + entrypoint so functions/venv is never compiled.
+          uv run python -m compileall app functions/main.py
 
       - name: Run Pytest Unit Tests
         run: |
@@ -53,6 +54,17 @@ jobs:
         run: |
           cd frontend
           npm run build
+
+      - name: Install Playwright Chromium
+        run: |
+          cd frontend
+          npx playwright install --with-deps chromium
+
+      - name: Run Frontend Page-Load Perf Budgets
+        run: |
+          cd frontend
+          # test:perf rebuilds with mock Firebase; separate from prod build above.
+          npm run test:perf
 
   deploy:
     name: Deploy to Firebase

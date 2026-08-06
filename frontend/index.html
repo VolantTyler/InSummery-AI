@@ -14,10 +14,70 @@
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Non-blocking font stylesheet: avoids render-path wait on fonts.googleapis.com -->
+    <link
+        rel="preload"
+        as="style"
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap"
+        onload="this.onload=null;this.rel='stylesheet'"
+    >
+    <noscript>
+        <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    </noscript>
+    <style>
+        /* Critical first-paint shell (before JS/CSS chunks arrive). */
+        html, body { margin: 0; min-height: 100%; }
+        body {
+            font-family: Outfit, "Segoe UI", sans-serif;
+            background:
+                radial-gradient(1200px 600px at 10% -10%, #dbeafe 0%, transparent 55%),
+                radial-gradient(900px 500px at 100% 0%, #e0f2fe 0%, transparent 50%),
+                #f8fafc;
+            color: #1e293b;
+        }
+        #app-boot {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 2rem;
+            text-align: center;
+        }
+        #app-boot .mark {
+            width: 3rem;
+            height: 3rem;
+            border-radius: 1rem;
+            background: linear-gradient(145deg, #38bdf8, #0ea5e9 55%, #0284c7);
+            box-shadow: 0 10px 24px rgba(14, 165, 233, 0.28);
+            animation: boot-pulse 1.4s ease-in-out infinite;
+        }
+        #app-boot .brand {
+            margin: 0;
+            font-size: 1.75rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+        #app-boot .msg {
+            margin: 0;
+            color: #64748b;
+            font-size: 0.95rem;
+        }
+        @keyframes boot-pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(0.94); opacity: 0.85; }
+        }
+    </style>
 </head>
 <body>
-    <div id="root"></div>
+    <div id="root">
+        <div id="app-boot" role="status" aria-live="polite">
+            <div class="mark" aria-hidden="true"></div>
+            <p class="brand">InSummery</p>
+            <p class="msg">Loading your schedule…</p>
+        </div>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>

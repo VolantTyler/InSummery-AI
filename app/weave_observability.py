@@ -54,9 +54,11 @@ def setup_weave() -> bool:
 
     import logging
 
+    import wandb
     import weave
 
     project = os.getenv("WEAVE_PROJECT", "insummery-ai")
+    api_key = (os.getenv("WANDB_API_KEY") or "").strip()
     # implicitly_patch_integrations=False keeps Weave from auto-tracing the
     # Google ADK / GenAI SDKs. The workflow receives the *raw* email as
     # `new_message` and only masks it inside pii_mask_node, so automatic ADK
@@ -64,6 +66,10 @@ def setup_weave() -> bool:
     # data Weave receives is what the explicit helpers below record, all of
     # which is masked or summarized metadata.
     try:
+        # Explicit login avoids "not logged in" when the key is in .env but
+        # Weave/wandb did not pick up ambient credentials (common on Windows).
+        if api_key:
+            wandb.login(key=api_key, relogin=True, anonymous="never")
         weave.init(
             project,
             settings={
@@ -446,3 +452,88 @@ def trace_eval_case(
     if not _INITIALIZED:
         return _record()
     return weave_op("insummery.eval.case")(_record)()
+
+
+# Browser page-load metrics accepted from POST /client-metrics.
+# Keep this allowlist tight — no free-form strings that could carry PII.
+_CLIENT_PERF_VIEWS = frozenset({"boot", "loading", "auth", "onboarding", "dashboard"})
+_CLIENT_PERF_SOURCES = frozenset({"navigation", "web-vitals", "test"})
+_CLIENT_PERF_NUMERIC = (
+    "fcp",
+    "lcp",
+    "cls",
+    "inp",
+    "ttfb",
+    "dom_content_loaded",
+    "time_to_paint",
+    "load_event",
+)
+_CLIENT_PERF_RATINGS = frozenset({"good", "needs-improvement", "poor"})
+
+
+def sanitize_client_perf(payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Return a PII-safe subset of browser performance metrics.
+
+    Drops unknown keys and clamps numeric outliers. Used by the unauthenticated
+    ``/client-metrics`` endpoint before Weave recording.
+    """
+    data = payload if isinstance(payload, dict) else {}
+    view = str(data.get("view") or "boot").lower().strip()[:32]
+    if view not in _CLIENT_PERF_VIEWS:
+        view = "boot"
+    source = str(data.get("source") or "navigation").lower().strip()[:32]
+    if source not in _CLIENT_PERF_SOURCES:
+        source = "navigation"
+
+    clean: Dict[str, Any] = {"view": view, "source": source}
+
+    path = data.get("path")
+    if isinstance(path, str) and path.startswith("/") and len(path) <= 128:
+        # Path only — no query string (could contain tokens/emails).
+        clean["path"] = path.split("?", 1)[0][:128]
+
+    session_id = data.get("session_id")
+    if isinstance(session_id, str) and re.fullmatch(r"[A-Za-z0-9_-]{8,64}", session_id):
+        clean["session_id"] = session_id
+
+    rating = data.get("rating")
+    if isinstance(rating, str) and rating.lower() in _CLIENT_PERF_RATINGS:
+        clean["rating"] = rating.lower()
+
+    for key in _CLIENT_PERF_NUMERIC:
+        raw = data.get(key)
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            continue
+        value = float(raw)
+        if value < 0 or value > 600_000:
+            continue
+        if key == "cls":
+            clean[key] = round(value, 3)
+        else:
+            clean[key] = round(value, 1)
+
+    lcp = clean.get("lcp")
+    fcp = clean.get("fcp")
+    ttp = clean.get("time_to_paint")
+    clean["within_budget"] = True
+    if lcp is not None and lcp > 4000:
+        clean["within_budget"] = False
+    if fcp is not None and fcp > 2500:
+        clean["within_budget"] = False
+    if ttp is not None and ttp > 2000:
+        clean["within_budget"] = False
+
+    return clean
+
+
+async def trace_client_perf(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Record sanitized browser page-load metrics for Weave monitors."""
+
+    clean = sanitize_client_perf(payload)
+
+    async def _record() -> Dict[str, Any]:
+        return clean
+
+    if not _INITIALIZED:
+        return await _record()
+    return await weave_op("insummery.client.perf")(_record)()

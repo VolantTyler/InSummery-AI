@@ -136,5 +136,10 @@ tests/eval/baselines/local/
 # Generated Firebase Cloud Functions dependencies
 functions/app/
 
+# Playwright / frontend perf artifacts
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+
 # Local HITL feedback dataset growth (sanitized; never commit)
 data/hitl_feedback_cases.json

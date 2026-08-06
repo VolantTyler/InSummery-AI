@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { auth, authOnStateChanged } from "./firebase.js";
 import { apiFetch } from "./api.js";
-import AuthView from "./components/AuthView.jsx";
-import OnboardingView from "./components/OnboardingView.jsx";
-import Dashboard from "./components/Dashboard.jsx";
-import { DEMO_STORAGE_KEY, DEMO_USER, DEMO_PROFILE } from "./demo/demoData.js";
-import { loadDemoMatrix, restoreSeedDemoMatrix } from "./demo/demoStore.js";
+import AppShellBoot from "./components/AppShellBoot.jsx";
+import { trackEvent, trackPageView, reportWebVitals } from "./analytics.js";
+
+const AuthView = lazy(() => import("./components/AuthView.jsx"));
+const OnboardingView = lazy(() => import("./components/OnboardingView.jsx"));
+const Dashboard = lazy(() => import("./components/Dashboard.jsx"));
+
+const DEMO_STORAGE_KEY = "insummery_demo_mode";
 
 function isDemoMode() {
     return localStorage.getItem(DEMO_STORAGE_KEY) === "1";
@@ -26,9 +29,20 @@ export default function App() {
         localStorage.setItem("theme", theme);
     }, [theme]);
 
+    useEffect(() => {
+        if (view === "loading") return;
+        trackPageView(view);
+        reportWebVitals(view);
+    }, [view]);
+
     const toggleTheme = () => setTheme((t) => (t === "dark" ? "light" : "dark"));
 
-    const enterDemo = useCallback(() => {
+    const enterDemo = useCallback(async () => {
+        const [{ DEMO_USER, DEMO_PROFILE }, { loadDemoMatrix, restoreSeedDemoMatrix }] =
+            await Promise.all([
+                import("./demo/demoData.js"),
+                import("./demo/demoStore.js"),
+            ]);
         localStorage.setItem(DEMO_STORAGE_KEY, "1");
         restoreSeedDemoMatrix();
         setDemoMode(true);
@@ -38,6 +52,7 @@ export default function App() {
         setMatrix(loadDemoMatrix());
         setLoadError(null);
         setView("dashboard");
+        trackEvent("demo_enter");
     }, []);
 
     const exitDemo = useCallback(() => {
@@ -48,18 +63,28 @@ export default function App() {
         setProfile(null);
         setMatrix(null);
         setView("auth");
+        trackEvent("demo_exit");
     }, []);
 
     useEffect(() => {
         if (demoMode) {
-            setUser(DEMO_USER);
-            setToken("demo-local-token");
-            setProfile(DEMO_PROFILE);
-            // Don't clobber an in-progress demo matrix on HMR / effect re-runs.
-            setMatrix((current) => current ?? loadDemoMatrix());
-            setLoadError(null);
-            setView("dashboard");
-            return undefined;
+            let cancelled = false;
+            (async () => {
+                const [{ DEMO_USER, DEMO_PROFILE }, { loadDemoMatrix }] = await Promise.all([
+                    import("./demo/demoData.js"),
+                    import("./demo/demoStore.js"),
+                ]);
+                if (cancelled) return;
+                setUser(DEMO_USER);
+                setToken("demo-local-token");
+                setProfile(DEMO_PROFILE);
+                setMatrix((current) => current ?? loadDemoMatrix());
+                setLoadError(null);
+                setView("dashboard");
+            })();
+            return () => {
+                cancelled = true;
+            };
         }
 
         const unsubscribe = authOnStateChanged(auth, async (u) => {
@@ -80,6 +105,10 @@ export default function App() {
 
     const loadDashboardData = useCallback(async (t) => {
         if (demoMode || t === "demo-local-token") {
+            const [{ DEMO_PROFILE }, { loadDemoMatrix }] = await Promise.all([
+                import("./demo/demoData.js"),
+                import("./demo/demoStore.js"),
+            ]);
             setProfile(DEMO_PROFILE);
             setMatrix(loadDemoMatrix());
             setLoadError(null);
@@ -115,39 +144,45 @@ export default function App() {
 
     const reload = useCallback(() => {
         if (demoMode) {
-            setProfile(DEMO_PROFILE);
-            setMatrix(loadDemoMatrix());
-            setLoadError(null);
+            (async () => {
+                const [{ DEMO_PROFILE }, { loadDemoMatrix }] = await Promise.all([
+                    import("./demo/demoData.js"),
+                    import("./demo/demoStore.js"),
+                ]);
+                setProfile(DEMO_PROFILE);
+                setMatrix(loadDemoMatrix());
+                setLoadError(null);
+            })();
             return;
         }
         if (token) loadDashboardData(token);
     }, [token, loadDashboardData, demoMode]);
 
     if (view === "loading") {
-        return null;
-    }
-
-    if (view === "auth") {
-        return <AuthView onStartDemo={enterDemo} />;
-    }
-
-    if (view === "onboarding") {
-        return <OnboardingView user={user} token={token} onCompleted={reload} />;
+        return <AppShellBoot />;
     }
 
     return (
-        <Dashboard
-            user={user}
-            token={token}
-            profile={profile}
-            matrix={matrix}
-            loadError={loadError}
-            onReload={reload}
-            theme={theme}
-            onToggleTheme={toggleTheme}
-            demoMode={demoMode}
-            onExitDemo={exitDemo}
-            onMatrixChange={setMatrix}
-        />
+        <Suspense fallback={<AppShellBoot />}>
+            {view === "auth" && <AuthView onStartDemo={enterDemo} />}
+            {view === "onboarding" && (
+                <OnboardingView user={user} token={token} onCompleted={reload} />
+            )}
+            {view === "dashboard" && (
+                <Dashboard
+                    user={user}
+                    token={token}
+                    profile={profile}
+                    matrix={matrix}
+                    loadError={loadError}
+                    onReload={reload}
+                    theme={theme}
+                    onToggleTheme={toggleTheme}
+                    demoMode={demoMode}
+                    onExitDemo={exitDemo}
+                    onMatrixChange={setMatrix}
+                />
+            )}
+        </Suspense>
     );
 }
