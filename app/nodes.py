@@ -14,7 +14,14 @@ from app.agent_factories import (
 from app.pii_masker import PIIMasker
 from app.storage import LocalStorageProvider, FirestoreStorageProvider
 from app.schemas import InterpretationResult, DisruptionDetail
-from app.matrix_logic import calculate_gaps, merge_activities, apply_disruption, parse_date
+from app.matrix_logic import (
+    apply_disruption,
+    calculate_gaps,
+    merge_activities,
+    parse_date,
+    resolve_activity_child_names,
+    resolve_child_name,
+)
 from app.weave_observability import (
     check_extraction_guardrails,
     trace_agent_call,
@@ -255,15 +262,30 @@ async def matrix_analyzer_node(ctx: Context, node_input: Any) -> Dict[str, Any]:
             act_dict["location"] = masker.unmask(act_dict.get("location") or "")
             act_dict["notes"] = masker.unmask(act_dict.get("notes") or "")
             raw_activities.append(act_dict)
-            
+
+        # Map "Sam Smith" → profile "Sam" so MatrixGrid's exact equality shows the row.
+        raw_activities, name_warnings = resolve_activity_child_names(
+            raw_activities, profile.get("children") or []
+        )
         updated_matrix = merge_activities(current_matrix, raw_activities)
-        warnings = []
+        warnings = list(name_warnings)
     elif category == "disruption":
         dis_dict = extraction_result.model_dump() if hasattr(extraction_result, "model_dump") else dict(extraction_result)
         dis_dict["child_name"] = masker.unmask(dis_dict["child_name"])
         dis_dict["description"] = masker.unmask(dis_dict["description"])
         if dis_dict.get("activity_title"):
             dis_dict["activity_title"] = masker.unmask(dis_dict["activity_title"])
+
+        name_resolution = resolve_child_name(
+            dis_dict.get("child_name"), profile.get("children") or []
+        )
+        warnings = []
+        if name_resolution["matched"] and name_resolution["method"] != "exact":
+            warnings.append(
+                f"Matched extracted child name '{name_resolution['extracted']}' "
+                f"to profile child '{name_resolution['resolved']}'."
+            )
+        dis_dict["child_name"] = name_resolution["resolved"]
         
         previously_disrupted = {
             a.get("id") for a in current_matrix.get("activities", [])
@@ -274,7 +296,6 @@ async def matrix_analyzer_node(ctx: Context, node_input: Any) -> Dict[str, Any]:
             a for a in updated_matrix.get("activities", [])
             if a.get("status") == "DISRUPTED" and a.get("id") not in previously_disrupted
         ]
-        warnings = []
         if not newly_disrupted:
             warnings.append(
                 "Disruption received but no matching scheduled activity was found "

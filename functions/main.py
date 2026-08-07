@@ -312,7 +312,8 @@ def handle_process_email(req: https_fn.Request, user_id: str, headers: dict) -> 
     return https_fn.Response(
         json.dumps({
             "status": "COMPLETED",
-            "matrix": matrix
+            "matrix": matrix,
+            "warnings": matrix.get("warnings") or [],
         }),
         status=200,
         headers=headers,
@@ -470,7 +471,8 @@ def handle_resume_workflow(req: https_fn.Request, user_id: str, headers: dict) -
     return https_fn.Response(
         json.dumps({
             "status": "COMPLETED",
-            "matrix": matrix
+            "matrix": matrix,
+            "warnings": matrix.get("warnings") or [],
         }),
         status=200,
         headers=headers,

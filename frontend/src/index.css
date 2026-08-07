@@ -551,6 +551,11 @@ header {
     color: var(--success-text);
 }
 
+.status-warning {
+    background-color: var(--warning-bg);
+    color: var(--warning-text);
+}
+
 .status-error {
     background-color: var(--danger-bg);
     color: var(--danger-text);

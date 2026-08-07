@@ -2,8 +2,14 @@ from datetime import datetime
 
 import pytest
 
-from app.matrix_logic import (apply_disruption, calculate_gaps,
-                              merge_activities, parse_date)
+from app.matrix_logic import (
+    apply_disruption,
+    calculate_gaps,
+    merge_activities,
+    parse_date,
+    resolve_activity_child_names,
+    resolve_child_name,
+)
 
 
 @pytest.fixture
@@ -285,3 +291,48 @@ def test_calculate_gaps_accepts_matrix_grid_days_of_week_alias():
     assert len(emily_gaps) == 1
     assert emily_gaps[0]["start_time"] == "15:00"
     assert emily_gaps[0]["end_time"] == "17:00"
+
+
+def test_resolve_child_name_maps_full_name_to_profile_first_name():
+    children = [{"name": "Sam"}, {"name": "Remy"}]
+    result = resolve_child_name("Sam Smith", children)
+    assert result["matched"] is True
+    assert result["resolved"] == "Sam"
+    assert result["method"] == "first_name"
+
+
+def test_resolve_child_name_exact_preserves_profile_casing():
+    children = [{"name": "Sam"}]
+    result = resolve_child_name("sam", children)
+    assert result["matched"] is True
+    assert result["resolved"] == "Sam"
+    assert result["method"] == "exact"
+
+
+def test_resolve_child_name_unmatched_keeps_extracted():
+    children = [{"name": "Sam"}, {"name": "Remy"}]
+    result = resolve_child_name("Jordan", children)
+    assert result["matched"] is False
+    assert result["resolved"] == "Jordan"
+    assert result["method"] == "none"
+
+
+def test_resolve_child_name_does_not_confuse_prefix_siblings():
+    """'Sam' must not steal a match meant for 'Samantha' via substring."""
+    children = [{"name": "Sam"}, {"name": "Samantha"}]
+    result = resolve_child_name("Samantha Lee", children)
+    assert result["matched"] is True
+    assert result["resolved"] == "Samantha"
+
+
+def test_resolve_activity_child_names_warns_on_fuzzy_and_unmatched():
+    children = [{"name": "Sam"}]
+    activities = [
+        {"child_name": "Sam Smith", "activity_title": "Ice Skating"},
+        {"child_name": "Unknown Kid", "activity_title": "Camp"},
+    ]
+    resolved, warnings = resolve_activity_child_names(activities, children)
+    assert resolved[0]["child_name"] == "Sam"
+    assert resolved[1]["child_name"] == "Unknown Kid"
+    assert any("Matched extracted child name" in w for w in warnings)
+    assert any("Could not match child name 'Unknown Kid'" in w for w in warnings)
