@@ -13,6 +13,8 @@ from typing import Any, Callable, Dict, List, Optional, TypeVar
 F = TypeVar("F", bound=Callable[..., Any])
 
 _INITIALIZED = False
+_INIT_PID: Optional[int] = None
+_CLIENT: Any = None
 _DISABLED_VALUES = {"1", "true", "yes", "on"}
 
 # Keep in sync with DisruptionDetail prompt / schemas.
@@ -45,20 +47,39 @@ def setup_weave() -> bool:
     no-op when ``WANDB_API_KEY`` is absent or ``WEAVE_DISABLED`` is true, so local
     development and tests do not need a W&B credential. Init failures (bad key,
     network) also become a no-op so the app keeps running without Weave.
+
+    Cloud Functions / gunicorn may fork after import-time init; wandb/Weave's
+    asyncio helpers then raise ``ForkedError``. Re-init when the PID changes so
+    each worker owns a fresh client.
     """
-    global _INITIALIZED
-    if _INITIALIZED:
+    global _INITIALIZED, _INIT_PID, _CLIENT
+    if _INITIALIZED and _INIT_PID == os.getpid():
         return True
+    if _INITIALIZED and _INIT_PID != os.getpid():
+        # Forked worker: drop the parent process client and start clean.
+        _INITIALIZED = False
+        _CLIENT = None
+        _INIT_PID = None
     if not weave_enabled():
         return False
 
     import logging
 
-    import wandb
-    import weave
-
     project = os.getenv("WEAVE_PROJECT", "insummery-ai")
     api_key = (os.getenv("WANDB_API_KEY") or "").strip()
+    # Cloud Functions only emits already-sanitized Weave ops. Enabling
+    # redact_pii here downloads en_core_web_lg (~400MB) on cold start and
+    # OOMs the default 1Gi instance. Keep Presidio redact on for local/CLI.
+    in_cloud_functions = bool(
+        os.getenv("K_SERVICE") or os.getenv("FUNCTION_TARGET") or os.getenv("FUNCTION_NAME")
+    )
+    redact_override = os.getenv("WEAVE_REDACT_PII", "").lower()
+    if redact_override in _DISABLED_VALUES:
+        redact_pii = False
+    elif redact_override in {"1", "true", "yes", "on"}:
+        redact_pii = True
+    else:
+        redact_pii = not in_cloud_functions
     # implicitly_patch_integrations=False keeps Weave from auto-tracing the
     # Google ADK / GenAI SDKs. The workflow receives the *raw* email as
     # `new_message` and only masks it inside pii_mask_node, so automatic ADK
@@ -66,14 +87,17 @@ def setup_weave() -> bool:
     # data Weave receives is what the explicit helpers below record, all of
     # which is masked or summarized metadata.
     try:
+        import wandb
+        import weave
+
         # Explicit login avoids "not logged in" when the key is in .env but
         # Weave/wandb did not pick up ambient credentials (common on Windows).
         if api_key:
             wandb.login(key=api_key, relogin=True, anonymous="never")
-        weave.init(
+        _CLIENT = weave.init(
             project,
             settings={
-                "redact_pii": True,
+                "redact_pii": redact_pii,
                 "implicitly_patch_integrations": False,
             },
         )
@@ -81,9 +105,39 @@ def setup_weave() -> bool:
         logging.getLogger(__name__).warning(
             "Weave init failed (%s); continuing without Weave tracing.", exc
         )
+        _CLIENT = None
         return False
     _INITIALIZED = True
+    _INIT_PID = os.getpid()
     return True
+
+
+def flush_weave() -> None:
+    """Block until buffered Weave uploads finish.
+
+    Cloud Functions / Cloud Run can freeze CPU as soon as the HTTP response is
+    sent, which drops Weave's background upload threads. Call this in a
+    request ``finally`` (alongside OTEL ``force_flush``) so traces reach W&B.
+    See: https://docs.wandb.ai/support/weave/articles/trace-data-loss-in-worker-processes
+
+    Use ``client.flush()`` only — ``weave.finish()`` stops logging for the
+    process and would break subsequent warm-instance requests.
+    """
+    if not _INITIALIZED:
+        return
+    try:
+        client = _CLIENT
+        if client is None:
+            import weave
+
+            get_client = getattr(weave, "get_client", None)
+            client = get_client() if callable(get_client) else None
+        if client is not None and hasattr(client, "flush"):
+            client.flush()
+    except Exception as exc:  # noqa: BLE001 - observability must not break the app
+        import logging
+
+        logging.getLogger(__name__).warning("Weave flush failed: %s", exc)
 
 
 def weave_op(name: Optional[str] = None) -> Callable[[F], F]:

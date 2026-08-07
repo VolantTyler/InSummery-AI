@@ -29,7 +29,7 @@ from google_auth_oauthlib.flow import Flow
 from app.agent import insummery_workflow
 from app.storage import FirestoreStorageProvider
 from app.workflow_trace import emit_hitl_feedback, emit_workflow_trace
-from app.weave_observability import sanitize_client_perf, trace_client_perf
+from app.weave_observability import flush_weave, sanitize_client_perf, setup_weave, trace_client_perf
 
 # Initialize Firebase Admin
 if os.getenv("FIRESTORE_EMULATOR_HOST") or os.getenv("FIREBASE_AUTH_EMULATOR_HOST"):
@@ -97,21 +97,23 @@ def deserialize_session_events(events_data: List[Dict[str, Any]]) -> List[Any]:
 # the function's direct URL (see frontend/src/firebase.js DIRECT_API_URL).
 @https_fn.on_request(
     timeout_sec=300,
-    memory=options.MemoryOption.GB_1,
+    memory=options.MemoryOption.GB_2,
     secrets=["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "WANDB_API_KEY"]
 )
 def api(req: https_fn.Request) -> https_fn.Response:
     """Main API router for Firebase Cloud Functions."""
+    # Re-init Weave in this worker PID if gunicorn forked after import-time setup.
+    setup_weave()
     try:
         return _route_request(req)
     finally:
         # Cloud Functions instances can have their CPU frozen immediately
-        # after the response is sent, before the BatchSpanProcessor's
-        # background thread gets scheduled to export queued spans. Force a
-        # flush here so traces reliably reach Cloud Trace instead of being
-        # silently dropped.
+        # after the response is sent, before background exporters run.
+        # Force-flush OTEL (Cloud Trace) and Weave (W&B) so neither is
+        # silently dropped — Weave docs call this out for Cloud Run/Lambda.
         from opentelemetry import trace
         trace.get_tracer_provider().force_flush(timeout_millis=5000)
+        flush_weave()
 
 def _route_request(req: https_fn.Request) -> https_fn.Response:
     # Enable CORS

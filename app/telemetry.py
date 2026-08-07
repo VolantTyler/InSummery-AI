@@ -31,9 +31,17 @@ def setup_telemetry():
     before any GenAI Client instances are created.
     """
 
-    from app.weave_observability import setup_weave
+    # Cloud Functions / Cloud Run may fork workers after import. Initializing
+    # Weave (and wandb.login) in the parent PID causes ForkedError in children
+    # and can OOM cold starts while Presidio pulls spaCy models. Request
+    # handlers call setup_weave() themselves after the fork.
+    in_cloud_functions = bool(
+        os.getenv("K_SERVICE") or os.getenv("FUNCTION_TARGET") or os.getenv("FUNCTION_NAME")
+    )
+    if not in_cloud_functions:
+        from app.weave_observability import setup_weave
 
-    setup_weave()
+        setup_weave()
 
     # 1. Initialize the Tracer Provider
     provider = TracerProvider()

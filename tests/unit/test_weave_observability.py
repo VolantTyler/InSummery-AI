@@ -14,15 +14,36 @@ from app.weave_monitors import ensure_production_monitors, build_monitors
 @pytest.fixture(autouse=True)
 def reset_initialized_flag(monkeypatch):
     monkeypatch.setattr(wo, "_INITIALIZED", False)
+    monkeypatch.setattr(wo, "_INIT_PID", None)
+    monkeypatch.setattr(wo, "_CLIENT", None)
     monkeypatch.delenv("WEAVE_PRESIDIO_GUARDRAIL", raising=False)
 
 
 @pytest.fixture
 def fake_weave(monkeypatch):
     """Stub weave + wandb.login so tests need no W&B credential or network."""
-    calls = []
+
+    class _FakeClient:
+        def __init__(self):
+            self.flush_calls = 0
+
+        def flush(self):
+            self.flush_calls += 1
+
+    class _InitLog(list):
+        def __init__(self):
+            super().__init__()
+            self.client = _FakeClient()
+
+    calls = _InitLog()
+
+    def fake_init(project, **kwargs):
+        calls.append((project, kwargs))
+        return calls.client
+
     weave_module = types.ModuleType("weave")
-    weave_module.init = lambda project, **kwargs: calls.append((project, kwargs))
+    weave_module.init = fake_init
+    weave_module.finish = lambda: calls.append(("finish",))
     monkeypatch.setitem(sys.modules, "weave", weave_module)
 
     wandb_module = types.ModuleType("wandb")
@@ -51,6 +72,10 @@ def test_setup_weave_disables_implicit_patching(monkeypatch, fake_weave):
     monkeypatch.setenv("WANDB_API_KEY", "test-key")
     monkeypatch.delenv("WEAVE_DISABLED", raising=False)
     monkeypatch.setenv("WEAVE_PROJECT", "test-project")
+    monkeypatch.delenv("K_SERVICE", raising=False)
+    monkeypatch.delenv("FUNCTION_TARGET", raising=False)
+    monkeypatch.delenv("FUNCTION_NAME", raising=False)
+    monkeypatch.delenv("WEAVE_REDACT_PII", raising=False)
 
     assert wo.setup_weave() is True
 
@@ -60,6 +85,17 @@ def test_setup_weave_disables_implicit_patching(monkeypatch, fake_weave):
     settings = kwargs["settings"]
     assert settings["redact_pii"] is True
     assert settings["implicitly_patch_integrations"] is False
+
+
+def test_setup_weave_disables_redact_pii_in_cloud_functions(monkeypatch, fake_weave):
+    monkeypatch.setenv("WANDB_API_KEY", "test-key")
+    monkeypatch.delenv("WEAVE_DISABLED", raising=False)
+    monkeypatch.setenv("K_SERVICE", "api")
+    monkeypatch.delenv("WEAVE_REDACT_PII", raising=False)
+
+    assert wo.setup_weave() is True
+    _, kwargs = fake_weave[0]
+    assert kwargs["settings"]["redact_pii"] is False
 
 
 def test_setup_weave_init_failure_is_noop(monkeypatch, fake_weave):
@@ -76,6 +112,32 @@ def test_setup_weave_init_failure_is_noop(monkeypatch, fake_weave):
     monkeypatch.setattr(weave, "init", boom)
     assert wo.setup_weave() is False
     assert wo._INITIALIZED is False
+
+
+def test_flush_weave_noop_when_not_initialized(fake_weave):
+    """flush_weave must be safe before setup (Cloud Functions finally block)."""
+    wo.flush_weave()
+    assert fake_weave.client.flush_calls == 0
+
+
+def test_flush_weave_calls_sdk_when_initialized(monkeypatch, fake_weave):
+    monkeypatch.setenv("WANDB_API_KEY", "test-key")
+    monkeypatch.delenv("WEAVE_DISABLED", raising=False)
+    assert wo.setup_weave() is True
+
+    wo.flush_weave()
+    assert fake_weave.client.flush_calls == 1
+
+
+def test_setup_weave_reinitializes_after_fork(monkeypatch, fake_weave):
+    monkeypatch.setenv("WANDB_API_KEY", "test-key")
+    monkeypatch.delenv("WEAVE_DISABLED", raising=False)
+    assert wo.setup_weave() is True
+    assert len(fake_weave) == 1
+
+    monkeypatch.setattr(wo, "_INIT_PID", -1)  # simulate different PID after fork
+    assert wo.setup_weave() is True
+    assert len(fake_weave) == 2
 
 
 def test_setup_weave_settings_disable_real_autopatching(monkeypatch):
