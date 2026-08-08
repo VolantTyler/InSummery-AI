@@ -54,9 +54,6 @@ def setup_weave() -> bool:
 
     import logging
 
-    import wandb
-    import weave
-
     project = os.getenv("WEAVE_PROJECT", "insummery-ai")
     api_key = (os.getenv("WANDB_API_KEY") or "").strip()
     # implicitly_patch_integrations=False keeps Weave from auto-tracing the
@@ -66,6 +63,12 @@ def setup_weave() -> bool:
     # data Weave receives is what the explicit helpers below record, all of
     # which is masked or summarized metadata.
     try:
+        # wandb is an optional weave extra (weave[wandb]); keep imports inside
+        # the try so a missing install degrades to no-op instead of crashing
+        # Cloud Functions startup.
+        import wandb
+        import weave
+
         # Explicit login avoids "not logged in" when the key is in .env but
         # Weave/wandb did not pick up ambient credentials (common on Windows).
         if api_key:
