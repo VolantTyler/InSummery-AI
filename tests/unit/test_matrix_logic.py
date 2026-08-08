@@ -6,6 +6,8 @@ from app.matrix_logic import (
     apply_disruption,
     calculate_gaps,
     merge_activities,
+    normalize_activities_dates,
+    normalize_activity_dates,
     parse_date,
     resolve_activity_child_names,
     resolve_child_name,
@@ -336,3 +338,48 @@ def test_resolve_activity_child_names_warns_on_fuzzy_and_unmatched():
     assert resolved[1]["child_name"] == "Unknown Kid"
     assert any("Matched extracted child name" in w for w in warnings)
     assert any("Could not match child name 'Unknown Kid'" in w for w in warnings)
+
+
+def test_normalize_activity_dates_pulls_ongoing_camp_back_to_current_year():
+    """On Aug 8 2026, June 30–Aug 15 must stay in 2026, not jump to 2027."""
+    today = parse_date("2026-08-08")
+    act = {
+        "child_name": "Sam",
+        "activity_title": "karate club",
+        "start_date": "2027-06-30",
+        "end_date": "2027-08-15",
+    }
+    fixed = normalize_activity_dates(act, today=today)
+    assert fixed["start_date"] == "2026-06-30"
+    assert fixed["end_date"] == "2026-08-15"
+
+
+def test_normalize_activity_dates_keeps_next_year_when_current_year_fully_past():
+    today = parse_date("2026-09-01")
+    act = {
+        "start_date": "2027-06-30",
+        "end_date": "2027-08-15",
+    }
+    fixed = normalize_activity_dates(act, today=today)
+    assert fixed["start_date"] == "2027-06-30"
+    assert fixed["end_date"] == "2027-08-15"
+
+
+def test_normalize_activity_dates_bumps_fully_past_range_forward():
+    today = parse_date("2026-08-08")
+    act = {
+        "start_date": "2025-06-30",
+        "end_date": "2025-08-15",
+    }
+    fixed = normalize_activity_dates(act, today=today)
+    assert fixed["start_date"] == "2026-06-30"
+    assert fixed["end_date"] == "2026-08-15"
+
+
+def test_normalize_activities_dates_batch():
+    today = parse_date("2026-08-08")
+    acts = normalize_activities_dates(
+        [{"start_date": "2027-06-30", "end_date": "2027-08-15"}],
+        today=today,
+    )
+    assert acts[0]["start_date"] == "2026-06-30"

@@ -28,6 +28,29 @@ function scrollToDayCard(dateStr) {
     });
 }
 
+function formatIngestSuccess(added, warnings) {
+    if (warnings?.length) {
+        return { msg: `Updated with warnings: ${warnings.join(" | ")}`, type: "warning" };
+    }
+    if (added?.activity_title && added?.child_name) {
+        const range =
+            added.start_date && added.end_date
+                ? ` (${added.start_date} → ${added.end_date})`
+                : "";
+        return {
+            msg: `Added ${added.activity_title} for ${added.child_name}${range}.`,
+            type: "success",
+        };
+    }
+    return { msg: "Schedule updated successfully!", type: "success" };
+}
+
+function pickAddedActivity(previousMatrix, nextMatrix) {
+    const prevIds = new Set((previousMatrix?.activities || []).map((a) => a.id));
+    const added = (nextMatrix?.activities || []).filter((a) => a?.id && !prevIds.has(a.id));
+    return added[added.length - 1] || null;
+}
+
 function isGuestDemo() {
     return localStorage.getItem(DEMO_STORAGE_KEY) === "1";
 }
@@ -163,14 +186,22 @@ export default function Dashboard({
                     setHitl({ workflowId: res.workflowId, question: res.message });
                 } else {
                     const warnings = res.warnings || res.matrix?.warnings || [];
-                    showStatus(
-                        warnings.length
-                            ? `Updated with warnings: ${warnings.join(" | ")}`
-                            : "Schedule updated successfully!",
-                        warnings.length ? "warning" : "success"
-                    );
+                    const added = pickAddedActivity(matrix, res.matrix);
+                    const status = formatIngestSuccess(added, warnings);
+                    showStatus(status.msg, status.type);
+                    if (res.matrix && onMatrixChange) {
+                        onMatrixChange(res.matrix);
+                    }
                     setIngestText("");
                     onReload();
+                    const today = new Date().toISOString().slice(0, 10);
+                    const focusDate =
+                        added?.start_date && added?.end_date && added.start_date <= today && today <= added.end_date
+                            ? today
+                            : added?.start_date;
+                    if (focusDate) {
+                        setTimeout(() => scrollToDayCard(focusDate), 120);
+                    }
                 }
             }
         } catch (err) {
@@ -215,14 +246,22 @@ export default function Dashboard({
                 setHitl({ workflowId: res.workflowId, question: res.message });
             } else {
                 const warnings = res.warnings || res.matrix?.warnings || [];
-                showStatus(
-                    warnings.length
-                        ? `Updated with warnings: ${warnings.join(" | ")}`
-                        : "Schedule updated successfully!",
-                    warnings.length ? "warning" : "success"
-                );
+                const added = pickAddedActivity(matrix, res.matrix);
+                const status = formatIngestSuccess(added, warnings);
+                showStatus(status.msg, status.type);
+                if (res.matrix && onMatrixChange) {
+                    onMatrixChange(res.matrix);
+                }
                 setIngestText("");
                 onReload();
+                const today = new Date().toISOString().slice(0, 10);
+                const focusDate =
+                    added?.start_date && added?.end_date && added.start_date <= today && today <= added.end_date
+                        ? today
+                        : added?.start_date;
+                if (focusDate) {
+                    setTimeout(() => scrollToDayCard(focusDate), 120);
+                }
             }
         } catch (err) {
             showStatus(`Error: ${err.message}`, "error");

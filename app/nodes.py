@@ -19,6 +19,7 @@ from app.matrix_logic import (
     calculate_gaps,
     merge_activities,
     parse_date,
+    normalize_activities_dates,
     resolve_activity_child_names,
     resolve_child_name,
 )
@@ -262,6 +263,10 @@ async def matrix_analyzer_node(ctx: Context, node_input: Any) -> Dict[str, Any]:
             act_dict["location"] = masker.unmask(act_dict.get("location") or "")
             act_dict["notes"] = masker.unmask(act_dict.get("notes") or "")
             raw_activities.append(act_dict)
+
+        # Prefer current-year seasonal ranges when the model jumped a year ahead
+        # (e.g. "June 30 – Aug 15" on Aug 8 → 2026, not 2027).
+        raw_activities = normalize_activities_dates(raw_activities)
 
         # Map "Sam Smith" → profile "Sam" so MatrixGrid's exact equality shows the row.
         raw_activities, name_warnings = resolve_activity_child_names(

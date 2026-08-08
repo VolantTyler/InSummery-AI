@@ -16,12 +16,22 @@ from app.schemas import InterpretationResult, DisruptionDetail
 def _today_context() -> str:
     """Ground the LLM in the current date so relative or year-less dates
     (e.g. 'next week', 'August 5th') resolve to the correct upcoming dates
-    instead of defaulting to a past year from the model's training data."""
+    instead of defaulting to a past year from the model's training data.
+
+    Mid-season camps are the common failure mode: on Aug 8, "June 30 – Aug 15"
+    must stay in the *current* year (still ongoing), not jump to next year
+    because June 30 already passed.
+    """
     now = datetime.now()
     return (
         f"Today's date is {now.strftime('%A')}, {now.strftime('%Y-%m-%d')}. "
-        "When a date in the message has no year, resolve it to the nearest "
-        "occurrence on or after today; never output a date in a past year."
+        "When a date in the message has no year: "
+        "(1) first assign the current calendar year; "
+        "(2) only move the range to next year if the entire range would already "
+        "be fully in the past (end date before today); "
+        "(3) never output a year before the current calendar year. "
+        "Example: on 2026-08-08, 'June 30 – August 15' → 2026-06-30 to "
+        "2026-08-15 (still ongoing), not 2027."
     )
 
 

@@ -21,6 +21,78 @@ def _name_tokens(value: str) -> List[str]:
     return [t for t in _normalize_person_name(value).split(" ") if t]
 
 
+def _safe_replace_year(value: datetime.date, year: int) -> datetime.date:
+    """Shift a date to ``year``, clamping Feb 29 → Feb 28 when needed."""
+    try:
+        return value.replace(year=year)
+    except ValueError:
+        return value.replace(year=year, day=28)
+
+
+def normalize_activity_dates(
+    activity: Dict[str, Any],
+    today: Optional[datetime.date] = None,
+) -> Dict[str, Any]:
+    """Prefer the current calendar year for year-less seasonal ranges.
+
+    Interpreters sometimes follow "nearest future date" too literally and push
+    an ongoing summer camp (start already passed, end still ahead) into next
+    year. If shifting start/end into ``today.year`` keeps the range ongoing or
+    upcoming (end >= today), use the current year.
+    """
+    today = today or datetime.now().date()
+    start_raw = activity.get("start_date")
+    end_raw = activity.get("end_date")
+    if not start_raw or not end_raw:
+        return activity
+
+    try:
+        start = parse_date(start_raw)
+        end = parse_date(end_raw)
+    except (TypeError, ValueError):
+        return activity
+
+    if end < start:
+        return activity
+
+    current_year = today.year
+    if start.year == current_year and end.year == current_year:
+        return activity
+
+    # Fully in the past for the stated years → bump forward until end >= today.
+    if end < today:
+        shifted = dict(activity)
+        years_ahead = 0
+        new_start, new_end = start, end
+        while new_end < today and years_ahead < 5:
+            years_ahead += 1
+            new_start = _safe_replace_year(start, start.year + years_ahead)
+            new_end = _safe_replace_year(end, end.year + years_ahead)
+        shifted["start_date"] = new_start.strftime("%Y-%m-%d")
+        shifted["end_date"] = new_end.strftime("%Y-%m-%d")
+        return shifted
+
+    # Future-year range that would still be active/upcoming in the current year.
+    if start.year > current_year or end.year > current_year:
+        try_start = _safe_replace_year(start, current_year)
+        try_end = _safe_replace_year(end, current_year)
+        if try_end >= try_start and try_end >= today:
+            shifted = dict(activity)
+            shifted["start_date"] = try_start.strftime("%Y-%m-%d")
+            shifted["end_date"] = try_end.strftime("%Y-%m-%d")
+            return shifted
+
+    return activity
+
+
+def normalize_activities_dates(
+    activities: List[Dict[str, Any]],
+    today: Optional[datetime.date] = None,
+) -> List[Dict[str, Any]]:
+    """Apply :func:`normalize_activity_dates` to each activity dict."""
+    return [normalize_activity_dates(act, today=today) for act in activities]
+
+
 def resolve_child_name(
     extracted: Optional[str],
     profile_children: List[Dict[str, Any]],
