@@ -162,7 +162,13 @@ export default function Dashboard({
                     showStatus("Clarification required...", "loading");
                     setHitl({ workflowId: res.workflowId, question: res.message });
                 } else {
-                    showStatus("Schedule updated successfully!", "success");
+                    const warnings = res.warnings || res.matrix?.warnings || [];
+                    showStatus(
+                        warnings.length
+                            ? `Updated with warnings: ${warnings.join(" | ")}`
+                            : "Schedule updated successfully!",
+                        warnings.length ? "warning" : "success"
+                    );
                     setIngestText("");
                     onReload();
                 }
@@ -208,7 +214,13 @@ export default function Dashboard({
             if (res.status === "INTERRUPTED") {
                 setHitl({ workflowId: res.workflowId, question: res.message });
             } else {
-                showStatus("Schedule updated successfully!", "success");
+                const warnings = res.warnings || res.matrix?.warnings || [];
+                showStatus(
+                    warnings.length
+                        ? `Updated with warnings: ${warnings.join(" | ")}`
+                        : "Schedule updated successfully!",
+                    warnings.length ? "warning" : "success"
+                );
                 setIngestText("");
                 onReload();
             }

@@ -1,10 +1,141 @@
+import re
 import uuid
 from datetime import datetime, timedelta
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 
 def parse_date(date_str: str) -> datetime.date:
     return datetime.strptime(date_str, "%Y-%m-%d").date()
+
+
+_NAME_SPLIT = re.compile(r"\s+")
+
+
+def _normalize_person_name(value: Optional[str]) -> str:
+    if not value or not isinstance(value, str):
+        return ""
+    return _NAME_SPLIT.sub(" ", value.strip()).casefold()
+
+
+def _name_tokens(value: str) -> List[str]:
+    return [t for t in _normalize_person_name(value).split(" ") if t]
+
+
+def resolve_child_name(
+    extracted: Optional[str],
+    profile_children: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Map an extracted child name onto a profile child's canonical name.
+
+    The matrix UI matches activities with strict equality against
+    ``profile.children[].name``. Emails often use fuller forms
+    (``Sam Smith``) while the profile stores a first name (``Sam``).
+
+    Matching order (first unique hit wins):
+    1. Exact case-insensitive match
+    2. Unique profile first-name equals the extracted first token
+    3. Unique profile whose tokens are all whole-word contained in the
+       extracted name (or vice versa), preferring the longest profile name
+
+    Returns a dict with ``resolved`` (name to store), ``matched`` (bool),
+    ``method`` (``exact`` / ``first_name`` / ``token_containment`` / ``none``),
+    and ``extracted`` (original string).
+    """
+    raw = (extracted or "").strip()
+    children = [
+        c.get("name")
+        for c in (profile_children or [])
+        if isinstance(c, dict) and isinstance(c.get("name"), str) and c.get("name").strip()
+    ]
+    result = {
+        "extracted": raw,
+        "resolved": raw,
+        "matched": False,
+        "method": "none",
+    }
+    if not raw:
+        return result
+    if not children:
+        return result
+
+    extracted_norm = _normalize_person_name(raw)
+    extracted_tokens = _name_tokens(raw)
+
+    # 1) Exact (case-insensitive) → profile's stored casing.
+    exact = [name for name in children if _normalize_person_name(name) == extracted_norm]
+    if len(exact) == 1:
+        result.update({"resolved": exact[0], "matched": True, "method": "exact"})
+        return result
+    if len(exact) > 1:
+        # Ambiguous identical profile names — keep extracted.
+        return result
+
+    # 2) Unique first-name match: profile "Sam" ← extracted "Sam Smith".
+    if extracted_tokens:
+        first = extracted_tokens[0]
+        first_hits = [
+            name
+            for name in children
+            if (_name_tokens(name)[:1] or [None])[0] == first
+        ]
+        if len(first_hits) == 1:
+            result.update(
+                {"resolved": first_hits[0], "matched": True, "method": "first_name"}
+            )
+            return result
+
+    # 3) Token containment either direction; prefer longest unique profile name.
+    containment: List[Tuple[int, str]] = []
+    extracted_set = set(extracted_tokens)
+    for name in children:
+        profile_tokens = _name_tokens(name)
+        if not profile_tokens:
+            continue
+        profile_set = set(profile_tokens)
+        if profile_set <= extracted_set or extracted_set <= profile_set:
+            containment.append((len(name), name))
+    if containment:
+        containment.sort(key=lambda item: item[0], reverse=True)
+        best_len, best_name = containment[0]
+        ties = [n for length, n in containment if length == best_len]
+        if len(ties) == 1:
+            result.update(
+                {"resolved": best_name, "matched": True, "method": "token_containment"}
+            )
+            return result
+
+    return result
+
+
+def resolve_activity_child_names(
+    activities: List[Dict[str, Any]],
+    profile_children: List[Dict[str, Any]],
+) -> Tuple[List[Dict[str, Any]], List[str]]:
+    """Resolve each activity's ``child_name`` onto the profile; collect warnings."""
+    resolved_activities: List[Dict[str, Any]] = []
+    warnings: List[str] = []
+    for act in activities:
+        act_copy = dict(act)
+        resolution = resolve_child_name(act_copy.get("child_name"), profile_children)
+        act_copy["child_name"] = resolution["resolved"]
+        if resolution["matched"] and resolution["method"] != "exact":
+            warnings.append(
+                f"Matched extracted child name '{resolution['extracted']}' "
+                f"to profile child '{resolution['resolved']}'."
+            )
+        elif not resolution["matched"] and resolution["extracted"]:
+            profile_names = ", ".join(
+                c.get("name")
+                for c in (profile_children or [])
+                if isinstance(c, dict) and c.get("name")
+            ) or "(none)"
+            warnings.append(
+                f"Could not match child name '{resolution['extracted']}' to a "
+                f"profile child ({profile_names}). The activity was saved but "
+                f"may not appear on the schedule until the name matches."
+            )
+        resolved_activities.append(act_copy)
+    return resolved_activities, warnings
 
 def parse_time_to_minutes(time_str: str) -> int:
     h, m = map(int, time_str.split(":"))
