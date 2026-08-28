@@ -1,12 +1,25 @@
 {
   "model": "gemini/gemini-2.5-flash",
-  "timestamp": "2026-07-05T20:51:03+00:00",
+  "timestamp": "2026-08-28T19:04:28+00:00",
+  "prompt_hash": "dcb095528058",
+  "dataset_hash": "22ddfdf374df",
   "metrics": {
+    "mask_recall": 0.375,
+    "mask_precision": 0.1667,
+    "mask_token_integrity": 0.5,
+    "mask_roundtrip_fidelity": 0.7727,
+    "name_resolution_accuracy": 0.75,
     "triager_accuracy": 0.9444,
-    "registration_field_score": 0.9515,
+    "registration_field_score": 0.9453,
     "registration_confidence_gate_rate": 1.0,
-    "disruption_field_score": 0.95,
+    "disruption_field_score": 0.9484,
     "workflow_pass_rate": 1.0,
-    "workflow_field_score": 0.9517
+    "workflow_field_score": 0.9454,
+    "hard_score": 0.9661,
+    "hard_activity_f1": 1.0,
+    "hard_confidence_gate_rate": 1.0,
+    "hard_identity_score": 0.9088,
+    "hard_multi_score": 0.9992,
+    "hard_temporal_score": 0.9902
   }
 }

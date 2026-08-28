@@ -31,7 +31,16 @@ import os
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 # Pinned deliberately: an unpinned judge silently changes the measuring stick.
-DEFAULT_JUDGE_MODEL = "vertex_ai/gemini-2.5-flash"
+#
+# The `gemini/` prefix (API key) rather than `vertex_ai/` (GCP project + ADC):
+# the judge must work wherever the eval runs, and the nightly workflow
+# authenticates with GEMINI_API_KEY. Override with JUDGE_MODEL.
+#
+# Caveat worth knowing when reading judge scores: this is currently the same
+# model family that produced the output being graded, so the scores carry some
+# self-preference bias. Point JUDGE_MODEL at a different provider to remove it.
+# This is one reason the tier is report-only and never gates.
+DEFAULT_JUDGE_MODEL = "gemini/gemini-2.5-flash"
 
 JUDGE_INSTRUCTION = (
     "You are grading the SELF-REPORT of an information-extraction system that "

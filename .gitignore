@@ -148,3 +148,5 @@ data/hitl_feedback_cases.json
 output/diagnosis.md
 output/diagnosis.json
 output/eval_report.json
+output/hard_judge.json
+output/judge_result.json
