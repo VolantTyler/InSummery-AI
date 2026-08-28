@@ -48,6 +48,15 @@ jobs:
         run: |
           uv run pytest
 
+      # The identity suite makes no model calls, so it needs no API key and
+      # costs nothing per PR. It gates PIIMasker and child-name resolution --
+      # the layer every LLM metric is computed on top of. A masking defect
+      # does not look like a masking bug in the aggregate scores, it looks
+      # like a mediocre model, so this runs on every change.
+      - name: Run Offline Eval Suites (no API key required)
+        run: |
+          uv run insummery-eval run --suites identity --no-baseline-check
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:

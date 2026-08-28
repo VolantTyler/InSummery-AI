@@ -5,6 +5,9 @@ Usage:
     insummery-eval run --suites workflow      # end-to-end workflow suite only
     insummery-eval run --json-out report.json
     insummery-eval run --weave-publish        # also mirror report into Weave Evaluations
+    insummery-eval run --suites identity       # offline only: no API key needed
+    insummery-eval run --judge                # add the non-gating LLM-judge tier
+    insummery-eval diagnose           # ranked findings + calibration -> Markdown
     insummery-eval baseline           # run all suites and (re)write the baseline
     insummery-eval weave-monitors     # publish/activate production Weave monitors
 """
@@ -24,20 +27,36 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__f
 load_dotenv(os.path.join(_REPO_ROOT, ".env"), override=True)
 setup_telemetry()
 
-from app.evaluation.runner import EvalHarness, SUITES
+from app.evaluation.runner import EvalHarness, SUITES, OFFLINE_SUITES
 from app.evaluation.baseline import (
     is_gemini_model,
     save_baseline,
     load_baseline,
     compare_to_baseline,
 )
+from app.evaluation.diagnose import build_diagnosis, render_markdown
+from app.evaluation.judge import judge_cases
+from app.evaluation.provenance import explain_change
 from app.evaluation.weave_publish import publish_eval_report
 from app.weave_monitors import ensure_production_monitors
 
 
 def _print_report(report: dict) -> None:
-    print(f"\nModel:     {report['model']}")
+    ran = report.get("suites") or []
+    offline_only = bool(ran) and set(ran) <= set(OFFLINE_SUITES)
+    # Naming a model on a run that never called one is how a suite gets
+    # mistaken for a live measurement.
+    model_line = (
+        "(none — offline suites only)" if offline_only else report["model"]
+    )
+    print(f"\nModel:     {model_line}")
     print(f"Timestamp: {report['timestamp']}\n")
+    if report.get("skipped_suites"):
+        print(
+            "WARNING: these suites were SKIPPED because the eval config does "
+            "not define their dataset: " + ", ".join(report["skipped_suites"])
+        )
+        print("They contributed no metrics. Add them to eval_config.yaml.\n")
     print(f"{'Metric':<40} {'Score':>8}")
     print("-" * 49)
     for metric, value in report["metrics"].items():
@@ -47,17 +66,40 @@ def _print_report(report: dict) -> None:
     def _is_failing(case: dict) -> bool:
         if "passed" in case:
             return not case["passed"]
-        return case["score"] < 1.0
+        score = case.get("score")
+        return isinstance(score, (int, float)) and score < 1.0
 
     for section_name, section in report["details"].items():
-        failing = [c for c in section["cases"] if _is_failing(c)]
-        if failing:
-            print(f"[{section_name}] cases below a perfect score:")
+        # Most suites report a flat "cases" list; the identity suite reports
+        # two lists (mask_cases / name_resolution_cases) because its two halves
+        # are scored differently.
+        case_lists = {
+            key: value
+            for key, value in section.items()
+            if key.endswith("cases") and isinstance(value, list)
+        }
+        for key, cases in sorted(case_lists.items()):
+            failing = [c for c in cases if _is_failing(c)]
+            if not failing:
+                continue
+            label = section_name if key == "cases" else f"{section_name}.{key}"
+            print(f"[{label}] cases below a perfect score:")
             for case in failing:
                 extra = ""
                 if case.get("status") and case["status"] != "COMPLETED":
                     extra = f" ({case['status']}: {case.get('error') or case.get('message')})"
-                print(f"  - {case['id']}: {case['score']:.4f}{extra}")
+                elif case.get("leaks") or case.get("over_masked") or case.get("glued_placeholders"):
+                    bits = []
+                    if case.get("leaks"):
+                        bits.append(f"leaked {case['leaks']}")
+                    if case.get("over_masked"):
+                        bits.append(f"over-masked {case['over_masked']}")
+                    if case.get("glued_placeholders"):
+                        bits.append(f"{len(case['glued_placeholders'])} glued placeholder(s)")
+                    extra = " (" + "; ".join(bits) + ")"
+                score = case.get("score")
+                score_str = f"{score:.4f}" if isinstance(score, (int, float)) else "FAIL"
+                print(f"  - {case['id']}: {score_str}{extra}")
             print()
 
 
@@ -103,12 +145,53 @@ def _maybe_publish_weave(report: dict, enabled: bool) -> None:
         print(f"Weave evaluation published: {result.get('name')}")
 
 
+def _pop_judge_inputs(report: dict) -> list:
+    """Remove the bulky judge payloads from the report and return them.
+
+    They carry the full masked email body, which has no business in a saved
+    artifact or in Weave. Always called before the report is written.
+    """
+    hard = (report.get("details") or {}).get("hard") or {}
+    return hard.pop("judge_inputs", []) or []
+
+
+def _maybe_judge(report: dict, enabled: bool, judge_inputs: list) -> None:
+    """Attach the LLM-judge block. Never touches report["metrics"].
+
+    Keeping judge results out of "metrics" is what makes the tier structurally
+    non-gating: check_thresholds and compare_to_baseline both read only that
+    key, so a judge score can never fail a build.
+    """
+    if not enabled:
+        return
+    if not judge_inputs:
+        print("NOTE: --judge had nothing to grade (the 'hard' suite did not run).")
+        return
+    from app.evaluation.runner import adk_agent_invoker
+
+    result = asyncio.run(judge_cases(judge_inputs, adk_agent_invoker))
+    report["judge"] = result
+    print(f"\nLLM judge (report-only, non-gating) — model {result['judge_model']}")
+    print(f"  graded {result['graded']}/{result['attempted']} cases")
+    for metric, value in result["metrics"].items():
+        shown = f"{value:.4f}" if isinstance(value, float) else "n/a"
+        print(f"  {metric:<38} {shown:>8}")
+    print()
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     harness = EvalHarness(config_path=args.config)
     suites = args.suites or None
-    print(f"Running InSummery agent evals against model: {harness.model_spec}")
+    if suites and set(suites) <= set(OFFLINE_SUITES):
+        # No model is contacted, so don't imply one was: printing a model spec
+        # here previously suggested a Gemini call that never happens.
+        print(f"Running offline eval suites (no model calls): {', '.join(suites)}")
+    else:
+        print(f"Running InSummery agent evals against model: {harness.model_spec}")
     report = _run_report(harness, suites=suites)
+    judge_inputs = _pop_judge_inputs(report)
     _print_report(report)
+    _maybe_judge(report, getattr(args, "judge", False), judge_inputs)
 
     if args.json_out:
         with open(args.json_out, "w", encoding="utf-8") as f:
@@ -159,6 +242,7 @@ def cmd_baseline(args: argparse.Namespace) -> int:
         )
 
     report = _run_report(harness)
+    _pop_judge_inputs(report)
     _print_report(report)
     _maybe_publish_weave(report, args.weave_publish)
 
@@ -172,6 +256,51 @@ def cmd_baseline(args: argparse.Namespace) -> int:
 
     path = save_baseline(report, harness.config, harness.root)
     print(f"Baseline saved to {path}")
+    return 0
+
+
+def cmd_diagnose(args: argparse.Namespace) -> int:
+    """Run the suites and emit a ranked diagnosis instead of a pass/fail gate.
+
+    `run` answers "did anything regress". `diagnose` answers "which capability
+    is costing the score, and is the model's confidence worth trusting" -- the
+    question you actually have when the numbers are merely mediocre. It never
+    gates, so it always exits 0 unless the run itself failed.
+    """
+    harness = EvalHarness(config_path=args.config)
+    suites = args.suites or None
+    print(f"Diagnosing InSummery agents against model: {harness.model_spec}")
+
+    report = _run_report(harness, suites=suites)
+    judge_inputs = _pop_judge_inputs(report)
+    _maybe_judge(report, args.judge, judge_inputs)
+
+    diagnosis = build_diagnosis(report)
+    if report.get("judge"):
+        diagnosis["judge"] = report["judge"]
+
+    baseline = load_baseline(harness.config, harness.root, harness.model_spec)
+    if baseline:
+        print(f"\n{explain_change(report, baseline)}")
+
+    markdown = render_markdown(diagnosis)
+    out_path = args.out
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(markdown)
+    print(f"\nDiagnosis written to {out_path}")
+
+    if args.json_out:
+        with open(args.json_out, "w", encoding="utf-8") as f:
+            json.dump({"report": report, "diagnosis": diagnosis}, f, indent=2)
+        print(f"Full report + diagnosis written to {args.json_out}")
+
+    findings = diagnosis["ranked_findings"][:5]
+    if findings:
+        print("\nTop findings by score lost:")
+        for i, f in enumerate(findings, 1):
+            print(f"  {i}. [{f['suite']}] {f['field']}: mean {f['mean']:.3f} "
+                  f"over {f['n']} activities ({f['points_lost']:.2f} points lost)")
     return 0
 
 
@@ -240,6 +369,15 @@ def main() -> None:
         action="store_true",
         help="Mirror the finished report into a Weave Evaluation (requires WANDB_API_KEY)",
     )
+    run_p.add_argument(
+        "--judge",
+        action="store_true",
+        help=(
+            "Also run the LLM-judge tier over the 'hard' suite. Reported only: "
+            "judge scores never enter report['metrics'], so they can never fail "
+            "a threshold or a baseline comparison."
+        ),
+    )
     run_p.set_defaults(func=cmd_run)
 
     base_p = sub.add_parser("baseline", help="Run evals and save the result as the baseline")
@@ -254,6 +392,25 @@ def main() -> None:
         help="Also mirror the baseline report into a Weave Evaluation",
     )
     base_p.set_defaults(func=cmd_baseline)
+
+    diag_p = sub.add_parser(
+        "diagnose",
+        help="Run evals and write a ranked findings + calibration report (never gates)",
+    )
+    diag_p.add_argument(
+        "--suites", nargs="+", choices=SUITES,
+        help="Only diagnose the given suites (default: all)",
+    )
+    diag_p.add_argument(
+        "--out", default="output/diagnosis.md",
+        help="Path for the Markdown diagnosis (default: output/diagnosis.md)",
+    )
+    diag_p.add_argument("--json-out", help="Also write report + diagnosis as JSON")
+    diag_p.add_argument(
+        "--judge", action="store_true",
+        help="Include the non-gating LLM-judge tier in the diagnosis",
+    )
+    diag_p.set_defaults(func=cmd_diagnose)
 
     mon_p = sub.add_parser(
         "weave-monitors",

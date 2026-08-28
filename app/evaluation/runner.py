@@ -37,8 +37,18 @@ from app.evaluation.scoring import (
     score_registration_activity,
     score_disruption,
     pick_best_activity,
+    score_activity_set,
     aggregate,
 )
+from app.evaluation.hard_manifest import load_cases as load_hard_cases
+from app.evaluation.provenance import build_provenance
+from app.evaluation.identity_scoring import (
+    aggregate_mask_results,
+    aggregate_name_resolution,
+    score_mask_case,
+    score_name_resolution_case,
+)
+from app.matrix_logic import resolve_child_name
 from app.weave_observability import trace_eval_case
 from app.evaluation.workflow import WorkflowInvoker, adk_workflow_invoker
 
@@ -49,7 +59,28 @@ CONFIDENCE_GATE = 80  # must match confidence_gate_node in app/nodes.py
 # Exact-match fields that must all be correct for a workflow case to pass.
 WORKFLOW_CRITICAL_FIELDS = ("child_name", "start_date", "end_date", "start_time", "end_time")
 
-SUITES = ("triager", "registration", "disruption", "workflow")
+SUITES = ("identity", "triager", "registration", "disruption", "workflow", "hard")
+
+# Axes probed by the "hard" suite (tests/test_cases/hard/hard_manifest.json).
+HARD_AXES = ("identity", "multi", "temporal")
+
+# The config key each suite needs. A suite whose key is absent is skipped
+# rather than crashing, so a config that predates a suite still runs -- but
+# the skip is recorded in the report and printed, never silent. A nightly eval
+# that quietly measures nothing is worse than one that fails, because it looks
+# like passing.
+SUITE_DATASET_KEYS = {
+    "identity": "identity",
+    "triager": "triager",
+    "registration": "interpreter_registration",
+    "disruption": "interpreter_disruption",
+    "workflow": "workflow_registration",
+    "hard": "hard_registration",
+}
+
+# Suites that make no model calls. These are safe (and free) to run on every
+# pull request with no API credential configured.
+OFFLINE_SUITES = ("identity",)
 
 
 async def adk_agent_invoker(agent: Any, text: str) -> str:
@@ -128,6 +159,72 @@ class EvalHarness:
             return case["text"]
         with open(self.root / case["file"], "r", encoding="utf-8") as f:
             return f.read()
+
+    # ------------------------------------------------------------------
+    # Identity (offline: no model calls)
+    # ------------------------------------------------------------------
+    def _resolve_case_profile(self, case: Dict[str, Any]) -> Dict[str, Any]:
+        """A case's profile is either a repo-relative path or an inline object.
+
+        Inline profiles let a case exercise a profile *shape* the shared
+        fixture does not have -- a stored surname, a formal given name -- which
+        is exactly where the masker's assumptions break.
+        """
+        profile = case.get("profile")
+        if isinstance(profile, dict):
+            return profile
+        if isinstance(profile, str):
+            return self._load_json(profile)
+        return self.profile
+
+    async def eval_identity(self) -> Dict[str, Any]:
+        """Score PIIMasker and resolve_child_name against span expectations.
+
+        Runs entirely offline. A masking defect corrupts the text every other
+        suite's score is computed from, so this suite is the first thing to
+        read when the live numbers look mediocre for no obvious reason.
+        """
+        dataset = self._load_json(self.config["datasets"]["identity"])
+
+        mask_results = []
+        for case in dataset.get("mask_cases", []):
+            masker = PIIMasker(self._resolve_case_profile(case))
+            scored = score_mask_case(masker, case)
+            # masked_text can contain real names from inline profiles; keep it
+            # out of the persisted report and out of Weave.
+            scored.pop("masked_text", None)
+            trace_eval_case(
+                "identity_mask",
+                case["id"],
+                1.0 if scored["passed"] else 0.0,
+                {
+                    "family": case.get("family"),
+                    "leak_count": len(scored["leaks"]),
+                    "over_mask_count": len(scored["over_masked"]),
+                    "glued_count": len(scored["glued_placeholders"]),
+                },
+            )
+            mask_results.append(scored)
+
+        name_results = []
+        for case in dataset.get("name_resolution_cases", []):
+            children = self._resolve_case_profile(case).get("children", [])
+            scored = score_name_resolution_case(resolve_child_name, case, children)
+            trace_eval_case(
+                "identity_name_resolution",
+                case["id"],
+                1.0 if scored["passed"] else 0.0,
+                {"family": case.get("family"), "method": scored["method"]},
+            )
+            name_results.append(scored)
+
+        metrics = aggregate_mask_results(mask_results)
+        metrics.update(aggregate_name_resolution(name_results))
+        return {
+            "metrics": metrics,
+            "mask_cases": mask_results,
+            "name_resolution_cases": name_results,
+        }
 
     # ------------------------------------------------------------------
     # Triager
@@ -253,6 +350,117 @@ class EvalHarness:
         }
 
     # ------------------------------------------------------------------
+    # Hard suite: identity / multi-activity / temporal stress cases
+    # ------------------------------------------------------------------
+    async def eval_hard_registration(
+        self, axes: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """Score the interpreter on cases built to have headroom.
+
+        Two differences from ``eval_interpreter_registration``:
+
+        1. Ground truth is a *list* of activities scored as a set
+           (``score_activity_set``), so a missed sibling and an invented
+           activity both cost score. The existing suite's
+           ``pick_best_activity`` cannot express either.
+        2. Every case declares an ``axis``, and metrics are reported per axis
+           as well as overall, so a drop points at a capability rather than at
+           a single number.
+        """
+        ds_cfg = self.config["datasets"]["hard_registration"]
+        manifest = self._load_json(ds_cfg["manifest"])
+        cases_dir = self.root / ds_cfg["cases_dir"]
+        cases = load_hard_cases(manifest, axes=axes)
+        agent = build_interpreter_registration_agent()
+
+        results = []
+        judge_inputs: List[Dict[str, Any]] = []
+        for case in cases:
+            with open(cases_dir / case["filename"], "r", encoding="utf-8") as f:
+                raw_text = f.read()
+
+            masker = PIIMasker(self.profile)
+            masked = masker.mask(raw_text)
+            response = await self.agent_invoker(agent, masked)
+            parsed = InterpretationResult.model_validate(extract_json(response))
+
+            predicted = []
+            for act in parsed.activities:
+                act_dict = act.model_dump()
+                for field in ("child_name", "activity_title", "location", "notes"):
+                    act_dict[field] = masker.unmask(act_dict.get(field) or "")
+                predicted.append(act_dict)
+
+            scored = score_activity_set(case["expected_activities"], predicted)
+            row = {
+                "id": case["id"],
+                "axis": case["axis"],
+                "intent": case.get("intent"),
+                "score": scored["score"],
+                "activity_f1": scored["activity_f1"],
+                "activity_precision": scored["activity_precision"],
+                "activity_recall": scored["activity_recall"],
+                "matched_field_score": scored["matched_field_score"],
+                "expected_count": scored["expected_count"],
+                "predicted_count": scored["predicted_count"],
+                "missed_expected": scored["missed_expected"],
+                "spurious_predicted": scored["spurious_predicted"],
+                "confidence_score": parsed.confidence_score,
+                "passes_confidence_gate": parsed.confidence_score >= CONFIDENCE_GATE,
+                "evaluation_trace": parsed.evaluation_trace,
+                # Per-field scores of the matched pairs, so `diagnose` can rank
+                # which field is actually costing the most across the suite.
+                "field_scores": [
+                    score_registration_activity(
+                        case["expected_activities"][p["expected_index"]],
+                        predicted[p["predicted_index"]],
+                    )["field_scores"]
+                    for p in scored["pairs"]
+                ],
+            }
+            judge_inputs.append(
+                {
+                    "id": case["id"],
+                    "masked_email": masked,
+                    "confidence_score": parsed.confidence_score,
+                    "evaluation_trace": parsed.evaluation_trace,
+                    "extracted_notes": [a.get("notes") or "" for a in predicted],
+                }
+            )
+            trace_eval_case(
+                "hard",
+                case["id"],
+                scored["score"],
+                {
+                    "axis": case["axis"],
+                    "activity_f1": scored["activity_f1"],
+                    "expected_count": scored["expected_count"],
+                    "predicted_count": scored["predicted_count"],
+                    "confidence_score": parsed.confidence_score,
+                },
+            )
+            results.append(row)
+
+        by_axis = {}
+        for axis in HARD_AXES:
+            rows = [r for r in results if r["axis"] == axis]
+            if rows:
+                by_axis[axis] = aggregate([r["score"] for r in rows])
+
+        return {
+            "score": aggregate([r["score"] for r in results]),
+            "activity_f1": aggregate([r["activity_f1"] for r in results]),
+            "confidence_gate_rate": aggregate(
+                [1.0 if r["passes_confidence_gate"] else 0.0 for r in results]
+            ),
+            "by_axis": by_axis,
+            "cases": results,
+            # Consumed by the --judge tier and stripped before the report is
+            # written: masked_email is bulky and belongs in no artifact.
+            "judge_inputs": judge_inputs,
+        }
+
+    # ------------------------------------------------------------------
     # End-to-end workflow (full ADK graph, registration cases)
     # ------------------------------------------------------------------
     async def eval_workflow_registration(
@@ -350,8 +558,21 @@ class EvalHarness:
         if unknown:
             raise ValueError(f"Unknown eval suite(s): {unknown}. Valid suites: {list(SUITES)}")
 
+        configured = self.config.get("datasets") or {}
+        skipped = [
+            suite
+            for suite in selected
+            if SUITE_DATASET_KEYS.get(suite) not in configured
+        ]
+        selected = [s for s in selected if s not in skipped]
+
         metrics: Dict[str, float] = {}
         details: Dict[str, Any] = {}
+
+        if "identity" in selected:
+            identity = await self.eval_identity()
+            metrics.update(identity["metrics"])
+            details["identity"] = identity
 
         if "triager" in selected:
             triager = await self.eval_triager()
@@ -375,13 +596,27 @@ class EvalHarness:
             metrics["workflow_field_score"] = workflow["field_score"]
             details["workflow_registration"] = workflow
 
-        return {
+        if "hard" in selected:
+            hard = await self.eval_hard_registration()
+            metrics["hard_score"] = hard["score"]
+            metrics["hard_activity_f1"] = hard["activity_f1"]
+            metrics["hard_confidence_gate_rate"] = hard["confidence_gate_rate"]
+            for axis, value in hard["by_axis"].items():
+                metrics[f"hard_{axis}_score"] = value
+            details["hard"] = hard
+
+        report = {
             "model": self.model_spec,
             "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "suites": selected,
+            "skipped_suites": skipped,
             "metrics": metrics,
             "details": details,
         }
+        # Stamp what produced these numbers, so a future score change can be
+        # attributed to a prompt edit, a fixture edit, or genuine model drift.
+        report.update(build_provenance(self.root, self.config))
+        return report
 
     def check_thresholds(self, report: Dict[str, Any]) -> List[str]:
         """Return failure messages for metrics below their absolute thresholds."""

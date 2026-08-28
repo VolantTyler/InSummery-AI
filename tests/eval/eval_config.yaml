@@ -4,11 +4,20 @@
 profile: tests/test_cases/profile_10_kids.json
 
 datasets:
+  # Offline suite: PIIMasker + resolve_child_name span diagnostics.
+  # Makes no model calls, so it gates every PR without a credential.
+  identity: tests/eval/datasets/identity_cases.json
   triager: tests/eval/datasets/triager_cases.json
   interpreter_registration:
     manifest: tests/test_cases/test_cases_manifest.json
     cases_dir: tests/test_cases
   interpreter_disruption: tests/eval/datasets/interpreter_disruption_cases.json
+  # Hard suite: identity / multi-activity / temporal stress cases, scored as
+  # activity SETS so misses and hallucinations both cost score. Built to have
+  # headroom - the original curated cases score ~0.95 and cannot show movement.
+  hard_registration:
+    manifest: tests/test_cases/hard/hard_manifest.json
+    cases_dir: tests/test_cases/hard
   # End-to-end suite: the same curated registration emails, but run through
   # the full production ADK workflow (mask -> triager -> interpreter -> gate)
   # instead of the interpreter agent in isolation.
@@ -32,6 +41,38 @@ thresholds:
   # a single routing failure zeroes a whole case, which would make an
   # absolute field-score threshold flap.)
   workflow_pass_rate: 0.80
+
+  # ---------------------------------------------------------------------
+  # Identity suite (offline, no model calls -- gates every PR).
+  #
+  # These floors are deliberately pinned to the CURRENT measured behavior,
+  # not to the values we want. PIIMasker does naive substring replacement,
+  # so "Sam" masks inside "same" and a surname the profile does not store
+  # is never masked at all. Those are real defects, documented in
+  # output/diagnosis.md -- they are not fixed here.
+  #
+  # Pinning at today's numbers makes this a RATCHET: the identity layer can
+  # never get worse without failing a PR, while a known-broken component
+  # does not block every unrelated change in the repo.
+  #
+  # When the masker fix lands, raise these to the target column and delete
+  # this note. Any value below target is a bug, not a tolerance.
+  #
+  #   metric                     floor (today)   target (after fix)
+  #   mask_recall                    0.3750            1.00
+  #   mask_precision                 0.1667            1.00
+  #   mask_token_integrity           0.5000            1.00
+  #   mask_roundtrip_fidelity        0.7727            1.00
+  #   name_resolution_accuracy       0.7500            1.00
+  # ---------------------------------------------------------------------
+  mask_recall: 0.3750
+  mask_precision: 0.1667
+  mask_token_integrity: 0.5000
+  mask_roundtrip_fidelity: 0.7727
+  name_resolution_accuracy: 0.7500
+
+  # Hard suite (live). No floor until a baseline exists -- see
+  # tests/eval/README.md. Add one after the first nightly run lands.
 
 # Regression gate relative to the committed baseline for the active model.
 # A metric may drop at most this much below the baseline before the run fails.
