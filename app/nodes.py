@@ -11,6 +11,7 @@ from app.agent_factories import (
     build_interpreter_disruption_agent,
     build_interpreter_hitl_agent,
 )
+from app.extraction_risk import assess_extraction, describe_for_human
 from app.pii_masker import PIIMasker
 from app.storage import LocalStorageProvider, FirestoreStorageProvider
 from app.schemas import InterpretationResult, DisruptionDetail
@@ -150,6 +151,31 @@ async def interpreter_disruption_node(ctx: Context, node_input: str) -> Any:
     ctx.state["guardrail"] = guard
     return res
 
+def _unmasked_activities(
+    ctx: Context, activities: Any, profile: Dict[str, Any]
+) -> List[Dict[str, Any]]:
+    """Copy the extracted activities with PII placeholders resolved.
+
+    This gate runs *before* matrix_analyzer_node, which is where unmasking
+    happens, so child_name arrives here as "[CHILD_B]" -- which would make
+    every single activity look like an unresolved child. Unmask copies for the
+    risk assessment only; the stored extraction_result is left untouched so
+    downstream nodes still see exactly what they expect.
+    """
+    masker = PIIMasker(profile)
+    masker.mask_to_original = ctx.state.get("pii_mappings", {})
+
+    unmasked = []
+    for act in activities or []:
+        act_dict = dict(act.model_dump() if hasattr(act, "model_dump") else (act or {}))
+        for field in ("child_name", "activity_title", "location", "notes"):
+            value = act_dict.get(field)
+            if isinstance(value, str) and value:
+                act_dict[field] = masker.unmask(value)
+        unmasked.append(act_dict)
+    return unmasked
+
+
 async def confidence_gate_node(ctx: Context, node_input: Any) -> str:
     """Check the extraction confidence score and decide whether to route to HITL."""
     category = ctx.state.get("category")
@@ -161,32 +187,57 @@ async def confidence_gate_node(ctx: Context, node_input: Any) -> str:
         return "CONFIDENCE_HIGH"
         
     score = 100
+    activities = []
+    trace = None
     if isinstance(node_input, InterpretationResult):
         score = node_input.confidence_score
+        activities = node_input.activities
+        trace = node_input.evaluation_trace
     elif isinstance(node_input, dict):
         score = node_input.get("confidence_score", 100)
-        
+        activities = node_input.get("activities") or []
+        trace = node_input.get("evaluation_trace")
+
     ctx.state["extraction_result"] = node_input
-    
-    if score >= 80:
+
+    # Deterministic escalation, independent of what the model says about
+    # itself. Self-reported confidence took only the values 95/98/100 across
+    # 29 eval cases, so the >= 80 test below has never once fired -- including
+    # on an extraction that attached a camp to the wrong child while reporting
+    # confidence 100. See app/extraction_risk.py and tests/eval/FINDINGS.md.
+    storage = _get_storage_provider(ctx)
+    profile = storage.get_profile(ctx.user_id or "default_user") or {}
+    risk = assess_extraction(
+        _unmasked_activities(ctx, activities, profile),
+        profile_children=profile.get("children") or [],
+        guardrail=ctx.state.get("guardrail"),
+    )
+    ctx.state["extraction_risk"] = risk
+
+    low_confidence = score < 80
+    if not risk["escalate"] and not low_confidence:
         ctx.route = "CONFIDENCE_HIGH"
-        await trace_confidence_gate(category, score, "CONFIDENCE_HIGH")
+        await trace_confidence_gate(category, score, "CONFIDENCE_HIGH", risk_codes=[])
         return "CONFIDENCE_HIGH"
+
+    if risk["escalate"]:
+        # Lead with the concrete problem. "I am 62% sure" is not something a
+        # parent can act on; "this says Sammy and your children are Sam and
+        # Pat" is.
+        question = describe_for_human(risk)
+        if low_confidence:
+            question += f"\n\n(The extraction also reported low confidence: {score}%.)"
     else:
-        if isinstance(node_input, InterpretationResult):
-            trace = node_input.evaluation_trace
-        elif isinstance(node_input, dict):
-            trace = node_input.get("evaluation_trace")
-        else:
-            trace = None
-        ctx.state["hitl_question"] = (
+        question = (
             f"The extraction confidence was low ({score}%). "
             f"Reason: {trace or 'Low extraction confidence'}. "
             f"Please clarify the schedule details."
         )
-        ctx.route = "CONFIDENCE_LOW"
-        await trace_confidence_gate(category, score, "CONFIDENCE_LOW")
-        return "CONFIDENCE_LOW"
+
+    ctx.state["hitl_question"] = question
+    ctx.route = "CONFIDENCE_LOW"
+    await trace_confidence_gate(category, score, "CONFIDENCE_LOW", risk_codes=risk["codes"])
+    return "CONFIDENCE_LOW"
 
 @node(rerun_on_resume=True)
 async def hitl_node(ctx: Context, node_input: Any) -> Any:

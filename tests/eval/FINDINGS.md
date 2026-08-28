@@ -102,6 +102,7 @@ Three structural gaps sat underneath that number.
 ## Finding 0 — the confidence score is a constant, so the HITL gate is decorative
 
 **Severity: highest. This outranks every field-level finding below.**
+**Status: FIXED** — see "The deterministic gate" below.
 
 Across **29 scored cases** spanning the easy curated set and the deliberately
 hard set, the model emitted exactly three distinct confidence values:
@@ -141,6 +142,48 @@ This is now tracked: `hard_confidence_gate_rate` and
 `registration_confidence_gate_rate` are baseline-gated, and
 `insummery-eval diagnose` prints the calibration table and a
 **confident-and-wrong** list on every run.
+
+### The deterministic gate
+
+`app/extraction_risk.py` escalates on the **extraction**, not on the model's
+opinion of itself, so it cannot be talked out of firing. It runs alongside the
+`confidence_score >= 80` test in `confidence_gate_node`; either can escalate.
+
+Signals, each tied to a specific way the schedule ends up wrong:
+
+| Code | Consequence it prevents |
+|---|---|
+| `unresolved_child_name` | activity lands on nobody's schedule column |
+| `missing_required_field` | activity cannot be placed at all |
+| `placeholder_leak` | `[CHILD_A]` written into the family's saved data |
+| `inverted_date_range` | end before start |
+| `date_range_implausibly_far` | year-inference error, >18 months out |
+| `guardrail_failed` | already computed and traced, but nothing acted on it |
+| `no_activities` | registration classified but nothing extracted |
+
+Measured end to end:
+
+- `hard_id_02` — the case the model rated **confidence 100** while attaching
+  the camp to a name matching no child — now returns `INTERRUPTED`, with the
+  prompt naming the actual problem: *"'Amy' does not match a child in the
+  profile (Pat, Sam, Alex, …)"*.
+- `workflow_pass_rate` stays at **1.0000** on the 10 clean fixtures. Zero
+  false escalations.
+
+Two design notes worth keeping:
+
+- **The message names the problem, not a percentage.** "I am 62% sure" is not
+  something a parent can act on; "this says Sammy and your children are Sam
+  and Pat" is.
+- **One signal was built and then removed.** "Date range already ended" was
+  meant to catch year-inference errors, but it fires on any legitimately old
+  email while the consequence is mild. Poor precision, modest consequence —
+  the exact combination the module's own design rule excludes. A year error
+  landing in the *future* is still caught by `date_range_implausibly_far`.
+
+The gate corrects the *routing*. It does not make `confidence_score` itself
+meaningful — that number is still effectively a constant, and is now best read
+as unreliable rather than as a safety signal.
 
 ## Finding 1 — `PIIMasker` does naive substring replacement
 
@@ -298,15 +341,10 @@ look like a quality drop.
 Re-ranked against measured data. The ordering changed once the live numbers
 came in: multi-activity and temporal work needs nothing.
 
-1. **Make the confidence score mean something** (Finding 0). Highest value and
-   it is a prompt change, not an architecture change. Options, cheapest first:
-   require the model to enumerate specific uncertainties before emitting a
-   number; add few-shot examples of low-confidence extractions; or derive the
-   gate from deterministic signals instead of self-report — an unmatched
-   `resolve_child_name` result, a missing required field, or a date needing
-   year inference should force a HITL pause regardless of what the model
-   claims. The deterministic route is the one I would build: it cannot be
-   talked out of firing.
+1. ~~**Make the confidence score mean something** (Finding 0).~~ **Done** —
+   built as a deterministic gate (`app/extraction_risk.py`) rather than as a
+   prompt change, because the prompt already orders the model to lower its
+   confidence and it demonstrably ignores that. See Finding 0.
 2. **Word-boundary matching in `PIIMasker`.** Wrap each name in `\b...\b`.
    Small and local; moves `mask_precision` and `mask_token_integrity` most, and
    fixes the corrupted text every live metric is computed on top of.

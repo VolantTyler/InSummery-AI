@@ -30,17 +30,21 @@ import json
 import os
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
-# Pinned deliberately: an unpinned judge silently changes the measuring stick.
-#
-# The `gemini/` prefix (API key) rather than `vertex_ai/` (GCP project + ADC):
-# the judge must work wherever the eval runs, and the nightly workflow
-# authenticates with GEMINI_API_KEY. Override with JUDGE_MODEL.
-#
-# Caveat worth knowing when reading judge scores: this is currently the same
-# model family that produced the output being graded, so the scores carry some
-# self-preference bias. Point JUDGE_MODEL at a different provider to remove it.
-# This is one reason the tier is report-only and never gates.
-DEFAULT_JUDGE_MODEL = "gemini/gemini-2.5-flash"
+# The model is pinned deliberately -- an unpinned judge silently changes the
+# measuring stick -- but the *provider prefix* follows whatever the app is
+# configured for. Hardcoding one prefix means the judge needs a different
+# credential than the rest of the run, which is how it failed all 9 cases the
+# first time: pinned to vertex_ai/ with only an API key configured.
+_PINNED_JUDGE_MODEL = "gemini-2.5-flash"
+DEFAULT_JUDGE_MODEL = f"vertex_ai/{_PINNED_JUDGE_MODEL}"
+
+# Caveat worth knowing when reading judge scores: by default this is the same
+# model family that produced the output being graded, so the scores carry
+# self-preference bias -- measurably so. On the one hard case where the
+# extraction attached a camp to the wrong child at confidence 100, the judge
+# still scored confidence_justification a perfect 1.0. Point JUDGE_MODEL at a
+# different provider to remove the bias. This is one reason the tier is
+# report-only and never gates.
 
 JUDGE_INSTRUCTION = (
     "You are grading the SELF-REPORT of an information-extraction system that "
@@ -73,7 +77,29 @@ def judge_prompt_hash() -> str:
 
 
 def judge_model_spec() -> str:
-    return os.getenv("JUDGE_MODEL", DEFAULT_JUDGE_MODEL)
+    """Resolve the judge model, following the app's provider by default.
+
+    An explicit ``JUDGE_MODEL`` always wins. Otherwise the judge uses the same
+    provider prefix the app resolved (``vertex_ai/`` or ``gemini/``) with the
+    pinned model name, so the judge authenticates the same way the rest of the
+    run does.
+    """
+    explicit = os.getenv("JUDGE_MODEL")
+    if explicit:
+        return explicit
+    try:
+        from app.model_client import resolve_model_spec
+
+        app_spec = resolve_model_spec()
+    except Exception:  # noqa: BLE001 - fall back to the pinned default
+        return DEFAULT_JUDGE_MODEL
+
+    for prefix in ("vertex_ai/", "gemini/"):
+        if app_spec.startswith(prefix):
+            return f"{prefix}{_PINNED_JUDGE_MODEL}"
+    # A local Ollama app model should not silently drag the judge local too;
+    # keep it on the pinned cloud model so judge scores stay comparable.
+    return DEFAULT_JUDGE_MODEL
 
 
 def build_judge_agent(model: Optional[object] = None):
