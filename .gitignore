@@ -143,3 +143,8 @@ frontend/blob-report/
 
 # Local HITL feedback dataset growth (sanitized; never commit)
 data/hitl_feedback_cases.json
+
+# Generated per-run eval artifacts (CI uploads these as build artifacts).
+output/diagnosis.md
+output/diagnosis.json
+output/eval_report.json

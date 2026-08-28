@@ -1,0 +1,124 @@
+name: Nightly Agent Eval
+
+# The live evaluation loop. Split out from ci.yml on purpose:
+#
+#   ci.yml         -> the offline `identity` suite, every PR, no credential, free.
+#   this workflow  -> every suite including the live LLM ones, once a night.
+#
+# Running the full suite per-PR would put a paid API call (and its flake risk)
+# in front of every change. Running it nightly keeps the window in which a
+# quality regression can sit undetected under 24 hours, which is the gap this
+# closes: before this workflow existed, `insummery-eval` was never executed by
+# CI at all and the thresholds and committed baseline were decorative.
+
+on:
+  schedule:
+    # 07:00 UTC daily.
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+    inputs:
+      suites:
+        description: 'Space-separated suites to run (default: all)'
+        required: false
+        default: ''
+      judge:
+        description: 'Also run the non-gating LLM-judge tier'
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: eval-nightly-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  live-eval:
+    name: Live Eval + Baseline Regression Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install Python dependencies
+        run: |
+          uv venv
+          uv pip install -e .[dev]
+
+      # Fail loudly rather than silently green: a nightly eval that quietly
+      # skips because a secret expired is worse than no nightly eval, because
+      # it looks like passing.
+      - name: Verify model credential is configured
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "::error::GEMINI_API_KEY is not configured for this repository."
+            echo "Add it under Settings -> Secrets and variables -> Actions."
+            echo "Without it the live suites cannot run and this job would"
+            echo "otherwise pass while measuring nothing."
+            exit 1
+          fi
+
+      - name: Run Full Eval Suite
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
+          # Force the cloud model and pin the identifier so the run is compared
+          # against the committed Gemini baseline rather than writing a local one.
+          FORCE_CLOUD_LLM: 'true'
+          GEMINI_MODEL: 'gemini/gemini-2.5-flash'
+        run: |
+          SUITES_ARG=""
+          if [ -n "${{ github.event.inputs.suites }}" ]; then
+            SUITES_ARG="--suites ${{ github.event.inputs.suites }}"
+          fi
+          JUDGE_ARG=""
+          if [ "${{ github.event.inputs.judge }}" = "true" ]; then
+            JUDGE_ARG="--judge"
+          fi
+          uv run insummery-eval run \
+            $SUITES_ARG $JUDGE_ARG \
+            --json-out output/eval_report.json
+
+      # Runs even when the gate above failed: the diagnosis is most valuable
+      # precisely on the nights something broke.
+      - name: Write Diagnosis Report
+        if: always()
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          FORCE_CLOUD_LLM: 'true'
+          GEMINI_MODEL: 'gemini/gemini-2.5-flash'
+        run: |
+          uv run insummery-eval diagnose \
+            --out output/diagnosis.md \
+            --json-out output/diagnosis.json || true
+
+      - name: Publish Diagnosis to Job Summary
+        if: always()
+        run: |
+          if [ -f output/diagnosis.md ]; then
+            cat output/diagnosis.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload Eval Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report-${{ github.run_id }}
+          path: |
+            output/eval_report.json
+            output/diagnosis.md
+            output/diagnosis.json
+          retention-days: 30
+          if-no-files-found: warn

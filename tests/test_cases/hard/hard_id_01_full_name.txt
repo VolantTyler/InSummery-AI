@@ -1,0 +1,19 @@
+From: Northside Aquatics <registrar@northsideaquatics.org>
+To: dana.smith@example.com
+Subject: Enrollment Confirmed - Session C
+Date: Mon, 15 Jun 2026 09:12:00 -0400
+
+Dear Guardian,
+
+We have confirmed the following enrollment.
+
+  Participant:  Taylor Nguyen-Smith
+  Program:      Competitive Swim Prep, Session C
+  Runs:         Monday 2026-07-20 through Friday 2026-07-31
+  Daily:        07:00 - 09:00
+  Pool:         Northside Aquatic Center, Lane Deck B, 88 Harbor Rd, Springville
+
+Swimmers should arrive on deck ten minutes before warm-up. Bring two towels,
+goggles, and a labeled water bottle.
+
+Head Coach: Marcus Webb

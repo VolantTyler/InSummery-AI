@@ -36,6 +36,12 @@ def save_baseline(report: Dict[str, Any], config: Dict[str, Any], root: Path) ->
     baseline = {
         "model": report["model"],
         "timestamp": report["timestamp"],
+        # Provenance travels with the baseline so a future regression can be
+        # attributed to a prompt edit, a fixture edit, or genuine model drift.
+        # Judge metrics are deliberately absent: only report["metrics"] is
+        # stored and compared, which is what keeps the judge tier non-gating.
+        "prompt_hash": report.get("prompt_hash"),
+        "dataset_hash": report.get("dataset_hash"),
         "metrics": report["metrics"],
     }
     with open(path, "w", encoding="utf-8") as f:

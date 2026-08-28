@@ -1,0 +1,14 @@
+From: Springville Parks <camps@springvilleparks.gov>
+To: dana.smith@example.com
+Subject: Registration receipt #44120
+
+Thank you for registering.
+
+  Camper:    Priya Raman
+  Camp:      Nature Explorers Week 2
+  Dates:     July 13, 2026 - July 17, 2026
+  Hours:     08:45 - 15:15
+  Location:  Cedar Hollow Trailhead, 4 Ranger Way, Springville
+
+Campers need closed-toe shoes, a nut-free lunch, and sunscreen.
+This registration was made using your household account.

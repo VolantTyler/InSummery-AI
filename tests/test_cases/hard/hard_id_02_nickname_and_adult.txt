@@ -1,0 +1,18 @@
+From: Riverbend Robotics <hello@riverbendrobotics.com>
+To: jamie.smith@example.com
+Subject: Sammy's spot is saved!
+
+Hi there,
+
+Great news - Sammy is all set for our Build-a-Bot workshop.
+
+  Dates: August 3-7, 2026
+  Time:  13:00 to 16:00 each afternoon
+  Where: Riverbend Makerspace, 12 Foundry St, Springville
+
+Your instructor this session is Sam Alvarez, who has been teaching our
+intermediate track for six years. Sam will email a parts list on the first day.
+
+Please note participation in the Friday showcase is optional.
+
+- The Riverbend Team

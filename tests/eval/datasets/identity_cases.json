@@ -1,0 +1,292 @@
+{
+  "_comment": [
+    "Offline identity diagnostics. No model calls: every case is scored by",
+    "app/evaluation/identity_scoring.py against PIIMasker and resolve_child_name.",
+    "",
+    "'profile' is a repo-relative path, or an inline object for cases that need",
+    "a profile shape the shared fixture does not cover (e.g. a stored surname).",
+    "",
+    "must_mask       - PII that must NOT survive the mask, in any casing.",
+    "must_not_mask   - ordinary words / third-party names whose occurrence count",
+    "                  must be preserved exactly.",
+    "Every case is additionally checked for placeholder token integrity (no",
+    "placeholder welded to adjacent word characters) and mask/unmask round-trip."
+  ],
+
+  "mask_cases": [
+    {
+      "id": "collide_sam_same",
+      "family": "substring_collision",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "text": "Camp runs at the same time each day. Please arrive at the same entrance.",
+      "must_not_mask": ["same"]
+    },
+    {
+      "id": "collide_pat_participation",
+      "family": "substring_collision",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "text": "Participation in the showcase is required. We will dispatch the packing list on Friday.",
+      "must_not_mask": ["Participation", "dispatch"]
+    },
+    {
+      "id": "collide_alex_alexandra",
+      "family": "substring_collision",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "text": "Alexandra Reyes will be the lead counselor this session.",
+      "must_not_mask": ["Alexandra"]
+    },
+    {
+      "id": "collide_drew_withdrew",
+      "family": "substring_collision",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "text": "Two families withdrew last week, so a spot has opened up.",
+      "must_not_mask": ["withdrew"]
+    },
+    {
+      "id": "collide_avery_bravery",
+      "family": "substring_collision",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "text": "The bravery award is presented on the final day of camp.",
+      "must_not_mask": ["bravery"]
+    },
+    {
+      "id": "collide_sam_samples",
+      "family": "substring_collision",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "text": "Bring writing samples to the first session.",
+      "must_not_mask": ["samples"]
+    },
+    {
+      "id": "collide_quinn_quinnipiac",
+      "family": "substring_collision",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "text": "The tournament is hosted at Quinnipiac University.",
+      "must_not_mask": ["Quinnipiac"]
+    },
+    {
+      "id": "collide_morgan_morgantown",
+      "family": "substring_collision",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "text": "Buses depart for Morgantown at 7:00 AM.",
+      "must_not_mask": ["Morgantown"]
+    },
+    {
+      "id": "collide_taylor_taylorsville",
+      "family": "substring_collision",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "text": "Our Taylorsville branch handles all refunds.",
+      "must_not_mask": ["Taylorsville"]
+    },
+    {
+      "id": "collide_jordan_jordanian",
+      "family": "substring_collision",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "text": "This week features Jordanian cuisine in the culinary track.",
+      "must_not_mask": ["Jordanian"]
+    },
+
+    {
+      "id": "surname_first_name_profile",
+      "family": "surname_leak",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "text": "Attendee Information:\nName: Sam Smith\nAge: 8\nAuthorized pick-up: Jamie Smith, Dana Smith.",
+      "must_mask": ["Smith"]
+    },
+    {
+      "id": "surname_stored_full_name",
+      "family": "surname_leak",
+      "profile": {
+        "children": [{"name": "Emily Carter", "age": 8}],
+        "parents": [{"name": "Sarah Carter", "email": "sarah@example.com"}],
+        "address": "1 Main St"
+      },
+      "text": "Emily is registered for Soccer Camp starting July 6.",
+      "must_mask": ["Emily"]
+    },
+    {
+      "id": "surname_family_reference",
+      "family": "surname_leak",
+      "profile": {
+        "children": [{"name": "Emily Carter", "age": 8}],
+        "parents": [{"name": "Sarah Carter", "email": "sarah@example.com"}],
+        "address": "1 Main St"
+      },
+      "text": "Welcome back to the Carter family! Emily Carter is enrolled.",
+      "must_mask": ["Carter"]
+    },
+
+    {
+      "id": "nickname_sammy",
+      "family": "nickname",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "text": "Sammy had a great first day at robotics camp.",
+      "must_mask": ["Sammy"]
+    },
+    {
+      "id": "nickname_formal_expansion",
+      "family": "nickname",
+      "profile": {
+        "children": [{"name": "Mike", "age": 9}],
+        "parents": [{"name": "Sarah", "email": "sarah@example.com"}],
+        "address": "1 Main St"
+      },
+      "text": "Michael is confirmed for the Tuesday swim block.",
+      "must_mask": ["Michael"]
+    },
+    {
+      "id": "nickname_katie_katherine",
+      "family": "nickname",
+      "profile": {
+        "children": [{"name": "Katherine", "age": 11}],
+        "parents": [{"name": "Sarah", "email": "sarah@example.com"}],
+        "address": "1 Main St"
+      },
+      "text": "Katie needs to bring a permission slip on Monday.",
+      "must_mask": ["Katie"]
+    },
+
+    {
+      "id": "possessive_riley",
+      "family": "possessive_punctuation",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "text": "Riley's swim class moves to Thursday. Contact Casey, Morgan (and Quinn) about carpool.",
+      "must_mask": ["Riley", "Casey", "Morgan", "Quinn"]
+    },
+    {
+      "id": "possessive_plural",
+      "family": "possessive_punctuation",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "text": "Pat and Sam's session runs 9:00-12:00.",
+      "must_mask": ["Pat"]
+    },
+
+    {
+      "id": "third_party_reese_witherspoon",
+      "family": "third_party_name",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "text": "Guest speaker Reese Witherspoon Jr. will visit on Friday.",
+      "must_not_mask": ["Witherspoon"]
+    },
+    {
+      "id": "third_party_org_name",
+      "family": "third_party_name",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "text": "Payment is processed through Morgan Stanley Smith Barney.",
+      "must_not_mask": ["Stanley", "Barney"]
+    },
+
+    {
+      "id": "roundtrip_full_email",
+      "family": "roundtrip",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "text": "Hi Dana,\n\nPat is registered for Junior Striker Soccer Camp, July 6-10, 9:00 AM to 12:00 PM.\nQuestions? Reach us at bookings@greenvalley.org or 555-222-3333.\n\nThanks,\nGreen Valley"
+    },
+    {
+      "id": "roundtrip_caregiver_contact",
+      "family": "roundtrip",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "text": "Avery (nanny, 555-010-0003, avery.nanny@example.com) will handle pickup for Riley and Taylor at 555 Pine Lane, Springville."
+    }
+  ],
+
+  "name_resolution_cases": [
+    {
+      "id": "resolve_exact",
+      "family": "exact",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "extracted": "Sam",
+      "expected_resolved": "Sam",
+      "expected_matched": true
+    },
+    {
+      "id": "resolve_case_insensitive",
+      "family": "exact",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "extracted": "sam",
+      "expected_resolved": "Sam",
+      "expected_matched": true
+    },
+    {
+      "id": "resolve_full_name",
+      "family": "full_name",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "extracted": "Sam Smith",
+      "expected_resolved": "Sam",
+      "expected_matched": true
+    },
+    {
+      "id": "resolve_full_name_middle",
+      "family": "full_name",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "extracted": "Riley Jane Smith",
+      "expected_resolved": "Riley",
+      "expected_matched": true
+    },
+    {
+      "id": "resolve_last_first_comma",
+      "family": "full_name",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "extracted": "Smith, Alex",
+      "expected_resolved": "Alex",
+      "expected_matched": true
+    },
+    {
+      "id": "resolve_nickname_diminutive",
+      "family": "nickname",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "extracted": "Sammy",
+      "expected_resolved": "Sam",
+      "expected_matched": true
+    },
+    {
+      "id": "resolve_nickname_formal",
+      "family": "nickname",
+      "profile": {
+        "children": [{"name": "Mike", "age": 9}]
+      },
+      "extracted": "Michael",
+      "expected_resolved": "Mike",
+      "expected_matched": true
+    },
+    {
+      "id": "resolve_possessive",
+      "family": "punctuation",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "extracted": "Riley's",
+      "expected_resolved": "Riley",
+      "expected_matched": true
+    },
+    {
+      "id": "resolve_unknown_child_stays_unmatched",
+      "family": "unknown_child",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "extracted": "Priya",
+      "expected_resolved": "Priya",
+      "expected_matched": false
+    },
+    {
+      "id": "resolve_unknown_similar_prefix_stays_unmatched",
+      "family": "unknown_child",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "extracted": "Samantha Okafor",
+      "expected_resolved": "Samantha Okafor",
+      "expected_matched": false
+    },
+    {
+      "id": "resolve_empty_stays_unmatched",
+      "family": "unknown_child",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "extracted": "",
+      "expected_resolved": "",
+      "expected_matched": false
+    },
+    {
+      "id": "resolve_placeholder_not_a_name",
+      "family": "unknown_child",
+      "profile": "tests/test_cases/profile_10_kids.json",
+      "extracted": "N/A",
+      "expected_resolved": "N/A",
+      "expected_matched": false
+    }
+  ]
+}

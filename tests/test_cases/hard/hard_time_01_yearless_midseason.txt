@@ -1,0 +1,14 @@
+From: Camp Willow <office@campwillow.org>
+To: dana.smith@example.com
+Subject: Summer session details
+
+Hi there,
+
+Morgan is registered for our full summer session.
+
+  Session runs June 30 through August 15
+  Daily hours are 8:30am to 4:00pm
+  Located at Camp Willow, 200 Lakeshore Drive, Springville
+
+Note we do not print the year on our confirmations - the session is the
+current summer season. Bus pickup is available for an extra fee.

@@ -8,7 +8,10 @@ implements the "Strict Evaluation & Tracing" requirement from Day 4 of the
 Kaggle 5-Day AI Agents course using fully **deterministic scoring** — no
 LLM-as-a-judge — so scores are reproducible for a given set of model outputs.
 
-The harness runs four suites:
+See [FINDINGS.md](./FINDINGS.md) for the baseline diagnosis of what these
+suites actually measured on first run.
+
+The harness runs six suites:
 
 - **`triager`**, **`registration`**, **`disruption`** evaluate each agent *in
   isolation*, built from the same shared factories (`app/agent_factories.py`)
@@ -18,6 +21,17 @@ The harness runs four suites:
   production ADK workflow* (PII mask → triager → interpreter → confidence
   gate), so the graph wiring itself — routing, state passing, the HITL
   confidence gate — is exercised end to end, not just the agents.
+- **`identity`** scores `PIIMasker` and `resolve_child_name` directly against
+  span expectations. It makes **no model calls**, so it needs no credential and
+  gates every pull request. It exists because a masking defect corrupts the
+  text every other metric is computed from — a bad mask does not look like a
+  masking bug in the aggregate scores, it looks like a mediocre model.
+- **`hard`** runs registration emails built to have *headroom* across three
+  axes — identity (full names, nicknames, an unknown child), multi-activity
+  (two siblings, two sessions, a booking buried in a newsletter), and temporal
+  (year-less ranges, split weekly schedules, a holiday gap). Ground truth is a
+  *list* scored as a set, so a missed sibling and an invented activity both
+  cost score.
 
 ## Running the evals
 
@@ -35,6 +49,17 @@ insummery-eval run --json-out output/eval_report.json
 
 # Regenerate the baseline after an intentional prompt/model change
 insummery-eval baseline
+
+# Offline only — no API key, no cost. This is what gates every PR.
+insummery-eval run --suites identity
+
+# Ranked findings + confidence calibration, written to output/diagnosis.md.
+# Never gates; answers "which capability is costing the score" rather than
+# "did anything regress".
+insummery-eval diagnose
+
+# Add the LLM-judge tier (report-only, see below)
+insummery-eval run --judge
 ```
 
 (Equivalent: `python -m app.evaluation.cli run`.)
@@ -71,6 +96,53 @@ covered offline by unit tests (`tests/unit/test_eval_scoring.py`,
 | `disruption_field_score` | Weighted field-level score for disruption extraction (child, date, type, description). |
 | `workflow_pass_rate` | End-to-end: share of registration emails that complete the full workflow with correct routing, confidence ≥ 80, correct critical fields (child, dates, times), and a matching activity title. |
 | `workflow_field_score` | End-to-end: same weighted field score as `registration_field_score`, but computed on the extraction the full workflow actually produced. Reported and baseline-tracked, not gated by an absolute threshold. |
+| `mask_precision` | Offline. Share of ordinary words and third-party names the masker leaves intact. Catches `"same"` → `"[CHILD_B]e"`. |
+| `mask_recall` | Offline. Share of true PII spans actually removed. Catches an unmasked surname. |
+| `mask_token_integrity` | Offline. Share of cases where no placeholder is welded to adjacent word characters. Catches the whole substring-collision class structurally, without anyone having to enumerate the colliding word. |
+| `mask_roundtrip_fidelity` | Offline. Share of cases where `unmask(mask(text)) == text`. |
+| `name_resolution_accuracy` | Offline. `resolve_child_name` over full names, nicknames, possessives, and children *not* in the profile (which must stay unmatched, not be coerced onto a sibling). |
+| `hard_score` | Live. `activity_f1 × matched_field_score` over the hard suite. |
+| `hard_identity_score` / `hard_multi_score` / `hard_temporal_score` | Live. The same score split by capability axis, so a drop points at a capability rather than at one number. |
+
+## Where the gates run
+
+| | Suites | Credential | Gate |
+|---|---|---|---|
+| `ci.yml`, every PR | `identity` | none needed | thresholds |
+| `eval-nightly.yml`, nightly + manual | all | `GEMINI_API_KEY` secret | thresholds + baseline regression |
+
+Before this split, `insummery-eval` ran in no workflow at all: the thresholds
+and the committed baseline were never enforced automatically.
+
+The identity thresholds in `eval_config.yaml` are pinned to the **current
+measured (defective) values** on purpose — a ratchet that prevents the identity
+layer getting worse without blocking every unrelated PR on a known-broken
+component. See the comment block in that file for the target values.
+
+## The LLM-judge tier (`--judge`)
+
+Deterministic scoring cannot tell whether the model's *self-report* is honest —
+whether `evaluation_trace` names the real ambiguity or just says "extraction
+successful", and whether `confidence_score` is defensible. `--judge` grades
+those, plus whether the parent-actionable content survived into `notes`.
+
+It is **structurally non-gating**: judge results are written to `report["judge"]`,
+never to `report["metrics"]`, and both `check_thresholds` and
+`compare_to_baseline` read only `metrics`. The judge model and judge prompt
+hash are stamped on every result so judge drift is itself attributable, and a
+judge failure degrades to `None` rather than to a zero — an unavailable judge
+must never look like a quality drop.
+
+## Drift attribution
+
+Every report and baseline carries a `prompt_hash` (over the static instruction
+constants, excluding the interpolated date) and a `dataset_hash`. When a
+nightly number moves:
+
+- `prompt_hash` changed → you changed the instructions.
+- `dataset_hash` changed → you changed ground truth; scores are not comparable
+  across that boundary.
+- neither changed → the **model** moved. That is drift.
 
 Absolute thresholds and the regression tolerance live in
 [eval_config.yaml](./eval_config.yaml). `insummery-eval run` exits non-zero if

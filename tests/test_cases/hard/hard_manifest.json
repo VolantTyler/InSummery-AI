@@ -1,0 +1,221 @@
+{
+  "_comment": [
+    "Ground truth for the hard live suites. Same field shape as",
+    "tests/test_cases/test_cases_manifest.json so score_registration_activity is",
+    "reused unchanged -- but expectations are a LIST, scored as a set by",
+    "score_activity_set, so a missed sibling and a hallucinated activity both",
+    "cost score.",
+    "",
+    "child_name holds the profile's canonical first name. name_score accepts a",
+    "fuller extracted form ('Taylor Nguyen-Smith' for 'Taylor'), so this is the",
+    "least-strict correct answer, not a demand for an exact string.",
+    "",
+    "date_resolution declares how a year-less fixture's {Y} token resolves, so",
+    "the case stays reproducible as the calendar moves."
+  ],
+  "cases": [
+    {
+      "id": "hard_id_01_full_name",
+      "axis": "identity",
+      "intent": "Child appears only under a hyphenated full name; profile stores the first name.",
+      "filename": "hard_id_01_full_name.txt",
+      "expected_activities": [
+        {
+          "child_name": "Taylor",
+          "activity_title": "Competitive Swim Prep, Session C",
+          "start_date": "2026-07-20",
+          "end_date": "2026-07-31",
+          "start_time": "07:00",
+          "end_time": "09:00",
+          "location": "Northside Aquatic Center, Lane Deck B, 88 Harbor Rd, Springville",
+          "notes": "Arrive on deck ten minutes before warm-up. Bring two towels, goggles, labeled water bottle. Head Coach: Marcus Webb."
+        }
+      ]
+    },
+    {
+      "id": "hard_id_02_nickname_and_adult",
+      "axis": "identity",
+      "intent": "Child referred to by diminutive ('Sammy') while an unrelated adult instructor shares the profile name ('Sam Alvarez'). The activity belongs to the child, not the instructor.",
+      "filename": "hard_id_02_nickname_and_adult.txt",
+      "expected_activities": [
+        {
+          "child_name": "Sam",
+          "activity_title": "Build-a-Bot workshop",
+          "start_date": "2026-08-03",
+          "end_date": "2026-08-07",
+          "start_time": "13:00",
+          "end_time": "16:00",
+          "location": "Riverbend Makerspace, 12 Foundry St, Springville",
+          "notes": "Instructor Sam Alvarez emails a parts list on day one. Friday showcase is optional."
+        }
+      ]
+    },
+    {
+      "id": "hard_id_03_unknown_child",
+      "axis": "identity",
+      "intent": "Camper is not in the family profile. Correct behavior is to extract the name as written and let resolve_child_name leave it unmatched, not coerce it onto a sibling.",
+      "filename": "hard_id_03_unknown_child.txt",
+      "expected_activities": [
+        {
+          "child_name": "Priya Raman",
+          "activity_title": "Nature Explorers Week 2",
+          "start_date": "2026-07-13",
+          "end_date": "2026-07-17",
+          "start_time": "08:45",
+          "end_time": "15:15",
+          "location": "Cedar Hollow Trailhead, 4 Ranger Way, Springville",
+          "notes": "Closed-toe shoes, nut-free lunch, sunscreen."
+        }
+      ]
+    },
+    {
+      "id": "hard_multi_01_two_siblings",
+      "axis": "multi",
+      "intent": "One email, two siblings, two different sessions of the same camp.",
+      "filename": "hard_multi_01_two_siblings.txt",
+      "expected_activities": [
+        {
+          "child_name": "Pat",
+          "activity_title": "Junior Striker Soccer Camp",
+          "start_date": "2026-07-06",
+          "end_date": "2026-07-10",
+          "start_time": "09:00",
+          "end_time": "12:00",
+          "location": "Green Valley Sports Complex, Pitch 3",
+          "notes": "Shin guards and a labeled water bottle."
+        },
+        {
+          "child_name": "Casey",
+          "activity_title": "Senior Striker Soccer Camp",
+          "start_date": "2026-07-06",
+          "end_date": "2026-07-10",
+          "start_time": "13:00",
+          "end_time": "16:00",
+          "location": "Green Valley Sports Complex, Pitch 1",
+          "notes": "Shin guards and a labeled water bottle."
+        }
+      ]
+    },
+    {
+      "id": "hard_multi_02_two_sessions",
+      "axis": "multi",
+      "intent": "One child enrolled in two consecutive blocks with different dates and times.",
+      "filename": "hard_multi_02_two_sessions.txt",
+      "expected_activities": [
+        {
+          "child_name": "Alex",
+          "activity_title": "Drawing Fundamentals",
+          "start_date": "2026-07-06",
+          "end_date": "2026-07-17",
+          "start_time": "10:00",
+          "end_time": "12:00",
+          "location": "Creative Minds Studio, Main Loft, 456 Art Alley, Springville",
+          "notes": "$50 materials fee due on the first day of each block."
+        },
+        {
+          "child_name": "Alex",
+          "activity_title": "Portfolio Intensive",
+          "start_date": "2026-07-20",
+          "end_date": "2026-07-31",
+          "start_time": "13:00",
+          "end_time": "16:00",
+          "location": "Creative Minds Studio, Main Loft, 456 Art Alley, Springville",
+          "notes": "$50 materials fee due on the first day of each block."
+        }
+      ]
+    },
+    {
+      "id": "hard_multi_03_registration_in_newsletter",
+      "axis": "multi",
+      "intent": "Exactly one confirmed booking, surrounded by three advertised-but-not-registered programs. Extracting the ads is a precision failure.",
+      "filename": "hard_multi_03_registration_in_newsletter.txt",
+      "expected_activities": [
+        {
+          "child_name": "Quinn",
+          "activity_title": "Little Sprouts Preschool Enrichment",
+          "start_date": "2026-07-06",
+          "end_date": "2026-07-24",
+          "start_time": "09:00",
+          "end_time": "11:30",
+          "location": "Community Center, Room 2B, 900 Civic Plaza, Springville",
+          "notes": "Bring a change of clothes and a small snack daily."
+        }
+      ]
+    },
+    {
+      "id": "hard_time_01_yearless_midseason",
+      "axis": "temporal",
+      "intent": "Year-less date range. Exercises the rule encoded in _today_context(): keep the current calendar year unless the whole range is already past.",
+      "filename": "hard_time_01_yearless_midseason.txt",
+      "date_resolution": {"rule": "season_year", "range_end": "08-15"},
+      "expected_activities": [
+        {
+          "child_name": "Morgan",
+          "activity_title": "Camp Willow summer session",
+          "start_date": "{Y}-06-30",
+          "end_date": "{Y}-08-15",
+          "start_time": "08:30",
+          "end_time": "16:00",
+          "location": "Camp Willow, 200 Lakeshore Drive, Springville",
+          "notes": "Bus pickup available for an extra fee."
+        }
+      ]
+    },
+    {
+      "id": "hard_time_02_split_schedule",
+      "axis": "temporal",
+      "intent": "One enrollment on a split weekly schedule. The flat schema has a single start/end time, so the correct extraction is two activities, not an averaged one.",
+      "filename": "hard_time_02_split_schedule.txt",
+      "expected_activities": [
+        {
+          "child_name": "Reese",
+          "activity_title": "Fall tennis clinic (Mon/Wed/Fri)",
+          "start_date": "2026-09-07",
+          "end_date": "2026-10-02",
+          "start_time": "16:00",
+          "end_time": "17:30",
+          "location": "Summit Tennis Academy, Courts 4-6, 77 Baseline Ave, Springville",
+          "notes": "Bring two racquets."
+        },
+        {
+          "child_name": "Reese",
+          "activity_title": "Fall tennis clinic (Tue/Thu)",
+          "start_date": "2026-09-08",
+          "end_date": "2026-10-01",
+          "start_time": "15:30",
+          "end_time": "18:00",
+          "location": "Summit Tennis Academy, Courts 4-6, 77 Baseline Ave, Springville",
+          "notes": "Bring two racquets."
+        }
+      ]
+    },
+    {
+      "id": "hard_time_03_holiday_gap",
+      "axis": "temporal",
+      "intent": "Two non-contiguous weeks with an explicit closed week between them. Collapsing them into one June 22 - July 10 range would silently claim childcare that does not exist.",
+      "filename": "hard_time_03_holiday_gap.txt",
+      "expected_activities": [
+        {
+          "child_name": "Jordan",
+          "activity_title": "Rocketry & Space Science (Week 1)",
+          "start_date": "2026-06-22",
+          "end_date": "2026-06-26",
+          "start_time": "09:00",
+          "end_time": "15:00",
+          "location": "Science Museum, Room 204, 100 Innovation Blvd, Springville",
+          "notes": "Peanut-free lunch. Closed-toe shoes required."
+        },
+        {
+          "child_name": "Jordan",
+          "activity_title": "Rocketry & Space Science (Week 2)",
+          "start_date": "2026-07-06",
+          "end_date": "2026-07-10",
+          "start_time": "09:00",
+          "end_time": "15:00",
+          "location": "Science Museum, Room 204, 100 Innovation Blvd, Springville",
+          "notes": "Peanut-free lunch. Closed-toe shoes required."
+        }
+      ]
+    }
+  ]
+}

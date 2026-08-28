@@ -1,0 +1,23 @@
+From: Green Valley Sports <camps@greenvalleysoccer.com>
+To: dana.smith@example.com
+Subject: Two registrations confirmed
+
+Hello,
+
+Both registrations went through. Details below.
+
+--- Registration 1 of 2 ---
+Camper: Pat Smith
+Camp:   Junior Striker Soccer Camp
+Dates:  July 6, 2026 to July 10, 2026
+Hours:  9:00 AM - 12:00 PM
+Field:  Green Valley Sports Complex, Pitch 3
+
+--- Registration 2 of 2 ---
+Camper: Casey Smith
+Camp:   Senior Striker Soccer Camp
+Dates:  July 6, 2026 to July 10, 2026
+Hours:  1:00 PM - 4:00 PM
+Field:  Green Valley Sports Complex, Pitch 1
+
+Both campers need shin guards and a labeled water bottle.

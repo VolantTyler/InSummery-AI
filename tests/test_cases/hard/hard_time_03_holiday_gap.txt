@@ -1,0 +1,19 @@
+From: Astro Academy <bookings@astroacademy.org>
+To: dana.smith@example.com
+Subject: Booking confirmation - Jordan
+
+Confirmed:
+
+  Camper: Jordan
+  Camp:   Rocketry & Space Science
+
+  Week 1: June 22 - June 26, 2026
+  Week 2: July 6 - July 10, 2026
+
+  (We are closed the week of June 29 for the Independence Day holiday, so
+  there is a one-week gap between your two weeks.)
+
+  Hours both weeks: 9:00 AM to 3:00 PM
+  Location: Science Museum, Room 204, 100 Innovation Blvd, Springville
+
+Pack a peanut-free lunch. Closed-toe shoes required.
