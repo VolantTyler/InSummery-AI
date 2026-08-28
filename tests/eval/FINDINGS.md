@@ -5,15 +5,82 @@ the instruments, measure, and rank what to fix. No extraction behavior was
 changed — `app/pii_masker.py` and the prompts in `app/agent_factories.py` are
 untouched by this work.
 
-Regenerate the live half with `insummery-eval diagnose` (see
-[README.md](./README.md)).
+**Status: measured.** Full live run against `gemini/gemini-2.5-flash`,
+2026-08-28 (`prompt_hash dcb095528058`, `dataset_hash 22ddfdf374df`). Numbers
+below are observed, not projected. Regenerate with `insummery-eval run
+--json-out output/eval_report.json`, then `insummery-eval diagnose
+--from-report output/eval_report.json` (free — no model calls).
+
+---
+
+## Headline: the extraction is strong. The identity layer and the confidence signal are not.
+
+The hard suite was built to have headroom on three axes. Two of them came back
+essentially solved:
+
+| Axis | Score | Verdict |
+|---|---|---|
+| `hard_multi_score` | **0.9992** | Solved |
+| `hard_temporal_score` | **0.9902** | Solved |
+| `hard_identity_score` | **0.9088** | The real gap |
+| `hard_activity_f1` | **1.0000** | Every expected activity found, none invented |
+
+**`activity_f1 = 1.0000` across all 9 cases.** The model correctly split a
+two-sibling email into two activities, a two-block enrollment into two, a split
+weekly schedule into two, and a camp with a holiday week off into two
+non-contiguous ranges — while correctly *not* extracting the three advertised
+programs surrounding the one real booking in a newsletter. It also resolved a
+year-less date range to the right season.
+
+I expected these axes to show weakness. They did not. **That prediction was
+wrong, and it is worth saying plainly: the multi-activity and temporal
+reasoning is genuinely good.** The scorer blind spot documented in Finding 3
+was real — the old instrument *could not have detected* a failure there — but
+the model does not actually fail there.
+
+What is left after that is narrow and specific, and it is the thing you
+suspected from the start: **names**.
 
 ---
 
 ## Why the models felt "adequate but not impressive"
 
-The existing suite could not have told you otherwise. The committed baseline
-(`baselines/baseline_gemini_gemini-2.5-flash.json`) reads:
+Two separate reasons, and neither is "the model is weak".
+
+### The 0.95 ceiling was a scoring bug
+
+`registration_field_score` sat at ~0.95 because **`notes` scores exactly 0.0 on
+every single case** — and `notes` carries weight 0.05. The headline number
+literally could not exceed 0.95.
+
+It scores 0 because free text is scored by `SequenceMatcher` ratio against one
+hand-written ground-truth phrasing, gated at 0.55. Measured on `case_02`:
+
+```
+EXPECTED: Pack peanut-free lunch/snacks, closed-toe shoes required, apply
+          sunscreen. Order ID: ST-2026-990812.
+
+MODEL:    Drop-off opens at 8:50 AM. Authorized Pick-up List: Jamie Smith,
+          Dana Smith, Avery (Nanny). Pre-camp checklist: Pack a peanut-free
+          sack lunch and two snacks. Comfortable, closed-toe shoes are
+          required for lab work. Apply sunscreen before arrival, as some
+          rocket launches will occur outdoors.
+
+similarity ratio: 0.1279  ->  gated to 0.0
+```
+
+The model's notes contain **everything** in the ground truth plus the drop-off
+time and the authorized pick-up list. It is the better answer and it scores
+zero. The independent LLM-judge tier rates the same field
+**`judge_notes_completeness` 0.978**.
+
+This is an instrument defect, not a model defect. It is also the single largest
+line in the ranked findings (10.0 points lost in each of two suites) — and it
+was invisible because the aggregate never moved.
+
+### The suite had no headroom
+
+The pre-existing baseline reads:
 
 | Metric | Baseline |
 |---|---|
@@ -31,6 +98,92 @@ teeth** — it cannot show an improvement and it cannot catch a regression.
 Three structural gaps sat underneath that number.
 
 ---
+
+## Finding 0 — the confidence score is a constant, so the HITL gate is decorative
+
+**Severity: highest. This outranks every field-level finding below.**
+**Status: FIXED** — see "The deterministic gate" below.
+
+Across **29 scored cases** spanning the easy curated set and the deliberately
+hard set, the model emitted exactly three distinct confidence values:
+
+```
+distinct confidence values ever emitted:  95, 98, 100
+cases clearing the production gate (>=80):  29 / 29  (100%)
+```
+
+There is one populated confidence band. The gate threshold is 80. **The gate has
+never fired.** `confidence_gate_rate` is 1.0000 on both suites, and it is 1.0000
+not because the extractions are all good but because the signal has no
+discriminative power.
+
+The consequence is concrete. On `hard_id_02_nickname_and_adult` the model got
+the child's name **wrong** — `child_name` scored 0.0, every other field 1.0 —
+and reported:
+
+```
+confidence_score: 100
+evaluation_trace: "All essential details (child's name, activity title,
+                   start/end dates, start/end times, and location) were
+                   clearly provided in the email."
+```
+
+Maximum confidence, and a trace that specifically names the child's name as
+clearly provided. That activity lands on the wrong child's calendar — or on no
+child's — with **no human ever asked**. For a product whose job is knowing which
+kid needs care when, silent wrong-child attribution is the worst available
+failure mode, and the mechanism designed to catch it is inert.
+
+`INTERPRETER_REGISTRATION_INSTRUCTION` (`app/agent_factories.py:52-58`) orders
+the model to drop below 80 when details are missing or ambiguous. It does not
+comply, and nothing checked.
+
+This is now tracked: `hard_confidence_gate_rate` and
+`registration_confidence_gate_rate` are baseline-gated, and
+`insummery-eval diagnose` prints the calibration table and a
+**confident-and-wrong** list on every run.
+
+### The deterministic gate
+
+`app/extraction_risk.py` escalates on the **extraction**, not on the model's
+opinion of itself, so it cannot be talked out of firing. It runs alongside the
+`confidence_score >= 80` test in `confidence_gate_node`; either can escalate.
+
+Signals, each tied to a specific way the schedule ends up wrong:
+
+| Code | Consequence it prevents |
+|---|---|
+| `unresolved_child_name` | activity lands on nobody's schedule column |
+| `missing_required_field` | activity cannot be placed at all |
+| `placeholder_leak` | `[CHILD_A]` written into the family's saved data |
+| `inverted_date_range` | end before start |
+| `date_range_implausibly_far` | year-inference error, >18 months out |
+| `guardrail_failed` | already computed and traced, but nothing acted on it |
+| `no_activities` | registration classified but nothing extracted |
+
+Measured end to end:
+
+- `hard_id_02` — the case the model rated **confidence 100** while attaching
+  the camp to a name matching no child — now returns `INTERRUPTED`, with the
+  prompt naming the actual problem: *"'Amy' does not match a child in the
+  profile (Pat, Sam, Alex, …)"*.
+- `workflow_pass_rate` stays at **1.0000** on the 10 clean fixtures. Zero
+  false escalations.
+
+Two design notes worth keeping:
+
+- **The message names the problem, not a percentage.** "I am 62% sure" is not
+  something a parent can act on; "this says Sammy and your children are Sam
+  and Pat" is.
+- **One signal was built and then removed.** "Date range already ended" was
+  meant to catch year-inference errors, but it fires on any legitimately old
+  email while the consequence is mild. Poor precision, modest consequence —
+  the exact combination the module's own design rule excludes. A year error
+  landing in the *future* is still caught by `date_range_implausibly_far`.
+
+The gate corrects the *routing*. It does not make `confidence_score` itself
+meaningful — that number is still effectively a constant, and is now best read
+as unreliable rather than as a safety signal.
 
 ## Finding 1 — `PIIMasker` does naive substring replacement
 
@@ -60,6 +213,12 @@ The model is handed corrupted English. This is a mechanical cause of mediocre
 extraction that **does not look like a masking bug in the aggregate scores — it
 looks like a mediocre model.** It was invisible to the old suite only because
 the 10 curated fixtures happen to contain none of these words.
+
+This is not only a theoretical corruption — it is the measured cause of the one
+hard-suite failure. `hard_id_02` refers to the child as `Sammy`; the masker
+emits `[CHILD_B]my`, which is neither the placeholder nor a name, so the model
+cannot recover `Sam`. That single defect is what holds `hard_identity_score` to
+0.9088 while the other two axes sit at 0.99+.
 
 Measured on the new offline suite (22 cases):
 
@@ -146,41 +305,71 @@ comment. Raise them when the masker fix lands.
 
 ---
 
+## LLM-judge tier (report-only)
+
+Ran over the 9 hard cases with `gemini/gemini-2.5-flash`:
+
+| Dimension | Score |
+|---|---|
+| `judge_notes_completeness` | 0.978 |
+| `judge_confidence_justification` | 1.000 |
+| `judge_trace_honesty` | 0.822 |
+
+Two things to take from this.
+
+**It cross-confirms the notes finding.** The deterministic scorer says 0.0; an
+independent read of the same field says 0.978. When two instruments disagree
+that hard, the instrument is what's broken.
+
+**It failed to catch the calibration problem — and that is the useful lesson.**
+It scored `confidence_justification` a perfect 1.0 on `hard_id_02`, the case
+where the model claimed confidence 100 and got the child's name wrong. It is
+currently the *same model family* grading its own output, so the scores carry
+self-preference bias. Point `JUDGE_MODEL` at a different provider to remove it.
+
+This is precisely why the tier is structurally non-gating. That contract was
+also verified under real failure: the first judge run errored on all 9 cases (I
+had pinned it to a Vertex model spec that needs a GCP project). It reported
+`graded 0/9` with `null` metrics — **not zeros** — the eval gates still passed,
+and no `judge_*` key reached `report["metrics"]`. An unavailable judge did not
+look like a quality drop.
+
+---
+
 ## Recommended fixes, ranked by impact ÷ effort
 
-1. **Word-boundary matching in `PIIMasker`.** Wrap each name pattern in
-   `\b...\b`. Small, local change; moves `mask_precision` and
-   `mask_token_integrity` most, and fixes the corrupted text every live metric
-   is computed on top of. Start here.
-2. **Restore original casing on unmask**, or match case-preservingly — fixes
-   `mask_roundtrip_fidelity` and is nearly free once (1) is in.
-3. **Teach the identity layer about full names.** Either add an optional
-   `last_name` to the profile schema and mask `first`, `last` and
-   `"first last"` independently, or run a Presidio `PERSON` pass over the
-   residual text. `presidio-analyzer` is already a dependency and already
-   wired as an opt-in guardrail in `weave_observability.py`. Closes the
-   surname leak, which is the one with privacy consequences.
-4. **Nickname/diminutive mapping**, shared by the masker and
-   `resolve_child_name` so both sides agree. Also handle possessives
-   (`Riley's`) in `resolve_child_name`.
-5. **Adopt `score_activity_set` in the existing registration and workflow
-   suites** once (1)-(4) land, so multi-activity emails are scored honestly
-   everywhere rather than only in the `hard` suite.
+Re-ranked against measured data. The ordering changed once the live numbers
+came in: multi-activity and temporal work needs nothing.
 
-## Still to measure
+1. ~~**Make the confidence score mean something** (Finding 0).~~ **Done** —
+   built as a deterministic gate (`app/extraction_risk.py`) rather than as a
+   prompt change, because the prompt already orders the model to lower its
+   confidence and it demonstrably ignores that. See Finding 0.
+2. **Word-boundary matching in `PIIMasker`.** Wrap each name in `\b...\b`.
+   Small and local; moves `mask_precision` and `mask_token_integrity` most, and
+   fixes the corrupted text every live metric is computed on top of.
+3. **Fix `notes` scoring.** Stop using `SequenceMatcher` on free text. Score
+   *key-fact coverage* — does the extraction contain the allergy policy, the
+   gear list, the drop-off window — rather than string overlap. This unlocks
+   the artificial 0.95 ceiling so the suite can show improvement at all.
+4. **Restore original casing on unmask** — fixes `mask_roundtrip_fidelity`,
+   nearly free once (2) lands.
+5. **Teach the identity layer about full names and nicknames.** Add an optional
+   `last_name` to the profile schema, or run a Presidio `PERSON` pass over the
+   residual text (`presidio-analyzer` is already a dependency and already wired
+   as an opt-in guardrail). Closes the surname leak — the one with privacy
+   consequences — and the `Sammy` case. Share the nickname map with
+   `resolve_child_name` so both sides agree, and handle possessives there.
+6. **Adopt `score_activity_set` in the registration and workflow suites.** Not
+   urgent: the model scores `activity_f1` 1.0, so this closes a blind spot
+   rather than a failure. Worth doing before anyone changes the prompts.
 
-The live suites need a model credential and did not run in the environment
-this investigation was performed in. The first run of
-`.github/workflows/eval-nightly.yml` (or a local
-`FORCE_CLOUD_LLM=true GEMINI_API_KEY=... insummery-eval diagnose`) will produce:
+## Open questions
 
-- `hard_score` and the per-axis breakdown (`hard_identity_score`,
-  `hard_multi_score`, `hard_temporal_score`)
-- the **confidence calibration table** — the open question flagged by
-  `registration_confidence_gate_rate: 1.00`. The model currently reports
-  itself confident on 100% of cases. If that holds on the hard suite, the
-  production HITL gate never fires and protects no one, which would outrank
-  every field-level finding above.
-
-Once those land, commit the hard-suite baseline and add a `hard_score`
-threshold to `eval_config.yaml`.
+- **`triage_gen_02`** is classified `registration` when it should be `general`
+  — the only triager miss, present in the pre-existing baseline too. Worth one
+  look at whether the case or the prompt is wrong.
+- **The hard suite is now nearly saturated too** (0.9661). It did its job of
+  locating the identity gap, but a follow-up round should add cases in the
+  areas that actually broke: nicknames, ambiguous sibling references
+  ("both boys"), and emails that supersede an earlier registration.

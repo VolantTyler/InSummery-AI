@@ -292,15 +292,26 @@ async def trace_pii_mask(masked_text: str, mapping_count: int) -> Dict[str, Any]
 
 
 async def trace_confidence_gate(
-    category: Optional[str], score: float, route: str
+    category: Optional[str],
+    score: float,
+    route: str,
+    risk_codes: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
-    """Record the confidence-gate routing decision."""
+    """Record the confidence-gate routing decision.
+
+    ``risk_codes`` are the deterministic escalation signals that fired
+    (app/extraction_risk.py). Recording them separately from the score is what
+    lets production tell apart "the model flagged itself" from "the model said
+    100 and we caught it anyway" -- the second is the case that matters.
+    """
 
     async def _record() -> Dict[str, Any]:
         return {
             "category": category,
             "confidence_score": score,
             "route": route,
+            "risk_codes": list(risk_codes or []),
+            "escalated_by_risk": bool(risk_codes),
         }
 
     if not _INITIALIZED:

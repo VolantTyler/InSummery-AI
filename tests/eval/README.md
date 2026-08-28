@@ -109,7 +109,11 @@ covered offline by unit tests (`tests/unit/test_eval_scoring.py`,
 | | Suites | Credential | Gate |
 |---|---|---|---|
 | `ci.yml`, every PR | `identity` | none needed | thresholds |
-| `eval-nightly.yml`, nightly + manual | all | `GEMINI_API_KEY` secret | thresholds + baseline regression |
+| `eval-nightly.yml`, nightly + manual | all | `GCP_SA_KEY` + `GCP_PROJECT` (Vertex), or `GEMINI_API_KEY` | thresholds + baseline regression |
+
+The nightly picks Vertex AI when `GCP_SA_KEY` and `GCP_PROJECT` are configured
+and falls back to the API key otherwise, warning in the log when it does. With
+neither, it fails the job rather than passing while measuring nothing.
 
 Before this split, `insummery-eval` ran in no workflow at all: the thresholds
 and the committed baseline were never enforced automatically.
@@ -154,9 +158,23 @@ any metric falls below its threshold **or** drops more than
 Eval scores are **model-dependent**: a baseline generated against a local
 Ollama model is not comparable to one generated against Gemini.
 
-**Decision: the committed reference baseline is generated against Gemini**
-(`gemini/gemini-2.5-flash`), since Gemini is the model used for the capstone
-submission. Concretely:
+**Decision: Vertex AI is the project's provider** (`vertex_ai/gemini-2.5-flash`,
+which is what `app/model_client.py` defaults to). Baselines are per-model, so
+the file name follows the resolved spec:
+`baseline_vertex_ai_gemini-2.5-flash.json`.
+
+A `baseline_gemini_gemini-2.5-flash.json` is also committed, from a run made
+through the API-key path. It is valid for that path but is **not** the Vertex
+reference — generate the Vertex baseline once Vertex credentials are wired.
+
+> **`GEMINI_API_KEY` alone does not select Gemini.** `resolve_model_spec()`
+> returns `vertex_ai/gemini-2.5-flash` by default, which needs a GCP project
+> and ADC, not an API key. To run through the API-key path you must set
+> **both** `GEMINI_API_KEY` and `GEMINI_MODEL=gemini/gemini-2.5-flash`.
+> Setting only the key gives you a Vertex call that fails, and a lookup for a
+> baseline file that does not exist — so the regression check silently skips.
+
+Concretely:
 
 - `insummery-eval baseline` while Gemini is active writes
   `tests/eval/baselines/baseline_gemini_gemini-2.5-flash.json` — this file is
@@ -170,7 +188,22 @@ never overwrite the committed Gemini baseline. To regenerate the committed
 baseline:
 
 ```bash
-FORCE_CLOUD_LLM=true GEMINI_API_KEY=... insummery-eval baseline
+# Vertex AI (the project's provider)
+export GOOGLE_CLOUD_PROJECT=your-project      # or VERTEXAI_PROJECT
+gcloud auth application-default login          # ADC
+FORCE_CLOUD_LLM=true insummery-eval baseline
+
+# Or the API-key path -- note BOTH variables are required
+FORCE_CLOUD_LLM=true \
+  GEMINI_API_KEY=... \
+  GEMINI_MODEL=gemini/gemini-2.5-flash \
+  insummery-eval baseline
+```
+
+To promote an existing run instead of paying for a second full suite:
+
+```bash
+insummery-eval baseline --from-report output/eval_report.json
 ```
 
 `baseline` refuses to save a run that fails the absolute thresholds unless you

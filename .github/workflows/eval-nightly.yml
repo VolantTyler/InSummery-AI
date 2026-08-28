@@ -55,18 +55,42 @@ jobs:
           uv venv
           uv pip install -e .[dev]
 
-      # Fail loudly rather than silently green: a nightly eval that quietly
-      # skips because a secret expired is worse than no nightly eval, because
-      # it looks like passing.
-      - name: Verify model credential is configured
+      # Vertex AI is the project's chosen provider (app/model_client.py
+      # defaults to vertex_ai/). Authenticate to Google Cloud when a service
+      # account credential is configured; the API-key path below is the
+      # fallback so this workflow keeps running while Vertex CI auth is being
+      # set up.
+      - name: Authenticate to Google Cloud (Vertex AI)
+        id: gcp_auth
+        if: ${{ secrets.GCP_SA_KEY != '' }}
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Select model provider
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
+          VERTEX_AUTHED: ${{ steps.gcp_auth.outcome == 'success' }}
         run: |
-          if [ -z "$GEMINI_API_KEY" ]; then
-            echo "::error::GEMINI_API_KEY is not configured for this repository."
-            echo "Add it under Settings -> Secrets and variables -> Actions."
-            echo "Without it the live suites cannot run and this job would"
-            echo "otherwise pass while measuring nothing."
+          if [ "$VERTEX_AUTHED" = "true" ] && [ -n "$GCP_PROJECT" ]; then
+            echo "Using Vertex AI (project $GCP_PROJECT)"
+            echo "GEMINI_MODEL=vertex_ai/gemini-2.5-flash" >> "$GITHUB_ENV"
+            echo "VERTEXAI_PROJECT=$GCP_PROJECT" >> "$GITHUB_ENV"
+            echo "GOOGLE_CLOUD_PROJECT=$GCP_PROJECT" >> "$GITHUB_ENV"
+            echo "VERTEXAI_LOCATION=${{ secrets.GCP_LOCATION || 'us-central1' }}" >> "$GITHUB_ENV"
+          elif [ -n "$GEMINI_API_KEY" ]; then
+            echo "Vertex AI is not configured; falling back to the Gemini API key."
+            echo "::warning::Running against gemini/ (API key), not Vertex AI."
+            echo "To use Vertex, add the GCP_SA_KEY and GCP_PROJECT secrets."
+            echo "GEMINI_MODEL=gemini/gemini-2.5-flash" >> "$GITHUB_ENV"
+          else
+            # Fail loudly rather than silently green: a nightly eval that
+            # quietly skips because a secret expired is worse than no nightly
+            # eval, because it looks like passing.
+            echo "::error::No model credential is configured for this repository."
+            echo "Add GCP_SA_KEY + GCP_PROJECT (Vertex AI), or GEMINI_API_KEY,"
+            echo "under Settings -> Secrets and variables -> Actions."
             exit 1
           fi
 
@@ -74,10 +98,10 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
-          # Force the cloud model and pin the identifier so the run is compared
-          # against the committed Gemini baseline rather than writing a local one.
+          # GEMINI_MODEL / VERTEXAI_* come from the "Select model provider"
+          # step via GITHUB_ENV. Baselines are per-model, so switching provider
+          # switches which baseline file the regression gate compares against.
           FORCE_CLOUD_LLM: 'true'
-          GEMINI_MODEL: 'gemini/gemini-2.5-flash'
         run: |
           SUITES_ARG=""
           if [ -n "${{ github.event.inputs.suites }}" ]; then
@@ -98,7 +122,6 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           FORCE_CLOUD_LLM: 'true'
-          GEMINI_MODEL: 'gemini/gemini-2.5-flash'
         run: |
           uv run insummery-eval diagnose \
             --out output/diagnosis.md \

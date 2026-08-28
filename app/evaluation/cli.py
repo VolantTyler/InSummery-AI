@@ -231,6 +231,28 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 def cmd_baseline(args: argparse.Namespace) -> int:
     harness = EvalHarness(config_path=args.config)
+
+    if args.from_report:
+        # Promote an existing run rather than paying for the whole suite a
+        # second time. The thresholds are re-checked below either way, so a
+        # saved run cannot become a baseline it never qualified for.
+        with open(args.from_report, "r", encoding="utf-8") as f:
+            report = json.load(f)
+        _pop_judge_inputs(report)
+        print(f"Promoting saved report to baseline: {args.from_report}")
+        print(f"  model {report.get('model')}, run {report.get('timestamp')}")
+        _print_report(report)
+        failures = harness.check_thresholds(report)
+        if failures and not args.force:
+            print("\nRefusing to save a baseline that does not meet the absolute "
+                  "thresholds (use --force to override):")
+            for failure in failures:
+                print(f"  - {failure}")
+            return 1
+        path = save_baseline(report, harness.config, harness.root)
+        print(f"Baseline saved to {path}")
+        return 0
+
     print(f"Generating eval baseline against model: {harness.model_spec}")
 
     if not is_gemini_model(harness.model_spec):
@@ -269,11 +291,27 @@ def cmd_diagnose(args: argparse.Namespace) -> int:
     """
     harness = EvalHarness(config_path=args.config)
     suites = args.suites or None
-    print(f"Diagnosing InSummery agents against model: {harness.model_spec}")
 
-    report = _run_report(harness, suites=suites)
-    judge_inputs = _pop_judge_inputs(report)
-    _maybe_judge(report, args.judge, judge_inputs)
+    if args.from_report:
+        # Diagnosis is a pure function over a finished report, so re-deriving
+        # it from a saved run costs nothing. Without this, asking a second
+        # question about the same numbers means paying for the whole suite
+        # again.
+        with open(args.from_report, "r", encoding="utf-8") as f:
+            report = json.load(f)
+        print(f"Diagnosing saved report: {args.from_report}")
+        print(f"  model {report.get('model')}, run {report.get('timestamp')}")
+        if args.judge:
+            print(
+                "NOTE: --judge needs live model output and cannot run against a "
+                "saved report; skipping the judge tier."
+            )
+        judge_inputs = []
+    else:
+        print(f"Diagnosing InSummery agents against model: {harness.model_spec}")
+        report = _run_report(harness, suites=suites)
+        judge_inputs = _pop_judge_inputs(report)
+        _maybe_judge(report, args.judge, judge_inputs)
 
     diagnosis = build_diagnosis(report)
     if report.get("judge"):
@@ -391,6 +429,14 @@ def main() -> None:
         action="store_true",
         help="Also mirror the baseline report into a Weave Evaluation",
     )
+    base_p.add_argument(
+        "--from-report",
+        help=(
+            "Promote a saved JSON report (from `run --json-out`) to the "
+            "baseline instead of re-running every suite. Thresholds are still "
+            "enforced. Free — no model calls."
+        ),
+    )
     base_p.set_defaults(func=cmd_baseline)
 
     diag_p = sub.add_parser(
@@ -406,6 +452,13 @@ def main() -> None:
         help="Path for the Markdown diagnosis (default: output/diagnosis.md)",
     )
     diag_p.add_argument("--json-out", help="Also write report + diagnosis as JSON")
+    diag_p.add_argument(
+        "--from-report",
+        help=(
+            "Diagnose a saved JSON report (from `run --json-out`) instead of "
+            "running the suites again. Free — no model calls."
+        ),
+    )
     diag_p.add_argument(
         "--judge", action="store_true",
         help="Include the non-gating LLM-judge tier in the diagnosis",

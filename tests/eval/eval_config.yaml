@@ -71,8 +71,18 @@ thresholds:
   mask_roundtrip_fidelity: 0.7727
   name_resolution_accuracy: 0.7500
 
-  # Hard suite (live). No floor until a baseline exists -- see
-  # tests/eval/README.md. Add one after the first nightly run lands.
+  # ---------------------------------------------------------------------
+  # Hard suite (live). First measured run: hard_score 0.9661,
+  # activity_f1 1.0000, identity 0.9088, multi 0.9992, temporal 0.9902.
+  #
+  # 0.85 is a deliberately loose floor for catastrophic breakage only. The
+  # real protection for this suite is the baseline regression gate
+  # (regression_tolerance 0.05 below the committed 0.9661), which catches a
+  # meaningful slip without flapping on normal LLM run-to-run variance.
+  # Per-axis scores are baseline-tracked but not floored: with only 3 cases
+  # each, one case swings an axis by 0.33.
+  # ---------------------------------------------------------------------
+  hard_score: 0.85
 
 # Regression gate relative to the committed baseline for the active model.
 # A metric may drop at most this much below the baseline before the run fails.

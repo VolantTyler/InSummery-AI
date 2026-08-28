@@ -75,6 +75,18 @@ def explain_change(current: Dict[str, Any], previous: Dict[str, Any]) -> str:
     """One line explaining what a score change between two reports can mean."""
     if not previous:
         return "No previous report to compare against."
+
+    # A baseline written before provenance stamps existed carries neither hash.
+    # Reporting that as "prompt changed; dataset changed" is a false alarm on
+    # every first comparison, which is exactly how a drift signal gets ignored.
+    if not previous.get("prompt_hash") and not previous.get("dataset_hash"):
+        return (
+            "The stored baseline predates provenance stamping, so a prompt or "
+            "dataset change cannot be ruled out for any movement. Regenerate "
+            "the baseline (`insummery-eval baseline`) to make future runs "
+            "attributable."
+        )
+
     prompt_changed = current.get("prompt_hash") != previous.get("prompt_hash")
     data_changed = current.get("dataset_hash") != previous.get("dataset_hash")
     model_changed = current.get("model") != previous.get("model")
