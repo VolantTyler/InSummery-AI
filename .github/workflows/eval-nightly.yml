@@ -60,9 +60,26 @@ jobs:
       # account credential is configured; the API-key path below is the
       # fallback so this workflow keeps running while Vertex CI auth is being
       # set up.
+      #
+      # The `secrets` context cannot be referenced directly inside an `if:`
+      # condition -- GitHub Actions does not expose it there (only in `env:`
+      # / `with:`), and a workflow that tries fails validation entirely, not
+      # just that step. So a preceding step exports presence as a step
+      # output, which `if:` on steps.*.outputs *is* allowed to read.
+      - name: Check for a Vertex AI credential
+        id: check_gcp
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          if [ -n "$GCP_SA_KEY" ]; then
+            echo "has_key=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_key=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Authenticate to Google Cloud (Vertex AI)
         id: gcp_auth
-        if: ${{ secrets.GCP_SA_KEY != '' }}
+        if: steps.check_gcp.outputs.has_key == 'true'
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
