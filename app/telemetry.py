@@ -18,6 +18,26 @@ def _console_export_enabled() -> bool:
     return os.getenv("INSUMMERY_OTEL_CONSOLE", "").lower() in ("1", "true", "yes")
 
 
+def _cloud_trace_export_disabled() -> bool:
+    """Opt-out for the Cloud Trace exporter.
+
+    Cloud Trace export needs the `roles/cloudtrace.agent` grant (specifically
+    `cloudtrace.traces.patch`) on top of whatever the caller actually needs to
+    talk to the model. A credential scoped tightly to just Vertex AI access --
+    exactly what you want for a CI service account -- doesn't have it, and the
+    BatchSpanProcessor doesn't fail quietly: it retries on its export interval
+    (every 5s by default) for the life of the process, each attempt logging a
+    full traceback. Measured impact: a nightly eval run against a
+    Vertex-AI-only-scoped service account produced dozens of these per minute
+    for the run's entire duration.
+
+    Set INSUMMERY_DISABLE_CLOUD_TRACE=true to skip configuring the exporter
+    rather than widening the credential's IAM grant just to keep an eval run
+    quiet -- the eval harness doesn't need to feed production trace tooling.
+    """
+    return os.getenv("INSUMMERY_DISABLE_CLOUD_TRACE", "").lower() in ("1", "true", "yes")
+
+
 def _maybe_add_console_exporter(provider: TracerProvider) -> None:
     if _console_export_enabled():
         provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
@@ -40,7 +60,12 @@ def setup_telemetry():
     
     # 2. Configure the Span Exporter
     project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
-    if project_id:
+    if project_id and _cloud_trace_export_disabled():
+        logger.info(
+            "Cloud Trace exporter skipped (INSUMMERY_DISABLE_CLOUD_TRACE)."
+        )
+        _maybe_add_console_exporter(provider)
+    elif project_id:
         try:
             from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
             exporter = CloudTraceSpanExporter(project_id=project_id)

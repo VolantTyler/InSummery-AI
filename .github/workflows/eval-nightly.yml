@@ -60,9 +60,26 @@ jobs:
       # account credential is configured; the API-key path below is the
       # fallback so this workflow keeps running while Vertex CI auth is being
       # set up.
+      #
+      # The `secrets` context cannot be referenced directly inside an `if:`
+      # condition -- GitHub Actions does not expose it there (only in `env:`
+      # / `with:`), and a workflow that tries fails validation entirely, not
+      # just that step. So a preceding step exports presence as a step
+      # output, which `if:` on steps.*.outputs *is* allowed to read.
+      - name: Check for a Vertex AI credential
+        id: check_gcp
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          if [ -n "$GCP_SA_KEY" ]; then
+            echo "has_key=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_key=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Authenticate to Google Cloud (Vertex AI)
         id: gcp_auth
-        if: ${{ secrets.GCP_SA_KEY != '' }}
+        if: steps.check_gcp.outputs.has_key == 'true'
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
@@ -97,11 +114,34 @@ jobs:
       - name: Run Full Eval Suite
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
           # GEMINI_MODEL / VERTEXAI_* come from the "Select model provider"
           # step via GITHUB_ENV. Baselines are per-model, so switching provider
           # switches which baseline file the regression gate compares against.
           FORCE_CLOUD_LLM: 'true'
+          # The eval-only service account is scoped to roles/aiplatform.user
+          # only (least privilege), so it lacks cloudtrace.traces.patch.
+          # Without this, setup_telemetry() tries to export spans to Cloud
+          # Trace anyway and the exporter retries + logs a full traceback on
+          # its 5s export interval for the entire run.
+          INSUMMERY_DISABLE_CLOUD_TRACE: 'true'
+          #
+          # WANDB_API_KEY is deliberately NOT set here (confirmed root cause
+          # of this job hitting its 45-minute timeout, reproduced twice).
+          # setup_telemetry() calls setup_weave() unconditionally on every
+          # CLI invocation, and with a real WANDB_API_KEY present it activates
+          # live Weave tracing with redact_pii=True. Weave's PII redaction
+          # lazily constructs a Presidio AnalyzerEngine on the first traced
+          # call, which -- if the spaCy model isn't already installed --
+          # tries to self-install it via `pip`. `uv venv` does not include
+          # pip in the venv, so that install fails inside a background
+          # worker thread. Confirmed in the job logs: three caught
+          # "Exception in worker" / SystemExit(1) tracebacks at job start,
+          # immediately followed by total silence for the rest of the run
+          # until GitHub's own timeout killed it. This command never passes
+          # --weave-publish, so Weave publishing was never actually used --
+          # the key was only ever activating this broken path for nothing.
+          # "Write Diagnosis Report" below has never set this key and has
+          # never hung, on either attempt, which is the direct A/B evidence.
         run: |
           SUITES_ARG=""
           if [ -n "${{ github.event.inputs.suites }}" ]; then
@@ -122,6 +162,7 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           FORCE_CLOUD_LLM: 'true'
+          INSUMMERY_DISABLE_CLOUD_TRACE: 'true'
         run: |
           uv run insummery-eval diagnose \
             --out output/diagnosis.md \

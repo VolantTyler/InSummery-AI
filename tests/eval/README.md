@@ -118,6 +118,36 @@ neither, it fails the job rather than passing while measuring nothing.
 Before this split, `insummery-eval` ran in no workflow at all: the thresholds
 and the committed baseline were never enforced automatically.
 
+### If the nightly hangs to its 45-minute timeout
+
+This happened three times while first wiring the nightly up, with two
+different confirmed causes — both fixed, both worth knowing if a future
+change reintroduces either shape of problem:
+
+1. **Cloud Trace export lacking IAM permission.** `setup_telemetry()`
+   configures a `CloudTraceSpanExporter` whenever `GOOGLE_CLOUD_PROJECT` is
+   set. A credential scoped to just `roles/aiplatform.user` (correct,
+   least-privilege) lacks `cloudtrace.traces.patch`, so the exporter retries
+   and logs a full traceback every 5s for the run's entire duration. Fixed by
+   `INSUMMERY_DISABLE_CLOUD_TRACE=true` in both live steps.
+2. **Weave's PII redaction hitting a broken `pip`-less venv.** `WANDB_API_KEY`
+   was wired into `Run Full Eval Suite` but the command never passed
+   `--weave-publish`, so it was activating live Weave tracing
+   (`redact_pii=True`) for no benefit. Weave's redaction lazily builds a
+   Presidio `AnalyzerEngine`, which tries to self-install its spaCy model via
+   `pip` on first use — and `uv venv` does not include `pip`. The install
+   fails inside a background thread pool, gets silently swallowed, and the
+   run goes dead silent until the timeout kills it — this was the actual
+   cause, confirmed by direct A/B: the sibling `Write Diagnosis Report` step,
+   which never had `WANDB_API_KEY` set, never hung, even running strictly
+   more suites. Fixed by not setting `WANDB_API_KEY` on a step that doesn't
+   publish to Weave.
+
+If you deliberately want Weave tracing during a live eval run (e.g. via
+`--weave-publish`), install `pip` into the venv first
+(`uv pip install pip` or `python -m ensurepip`) so Presidio's lazy model
+download can actually succeed instead of hanging.
+
 The identity thresholds in `eval_config.yaml` are pinned to the **current
 measured (defective) values** on purpose — a ratchet that prevents the identity
 layer getting worse without blocking every unrelated PR on a known-broken
