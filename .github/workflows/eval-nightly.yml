@@ -119,6 +119,14 @@ jobs:
           # step via GITHUB_ENV. Baselines are per-model, so switching provider
           # switches which baseline file the regression gate compares against.
           FORCE_CLOUD_LLM: 'true'
+          # The eval-only service account is scoped to roles/aiplatform.user
+          # only (least privilege), so it lacks cloudtrace.traces.patch.
+          # Without this, setup_telemetry() tries to export spans to Cloud
+          # Trace anyway and the exporter retries + logs a full traceback on
+          # its 5s export interval for the entire run -- confirmed in the run
+          # that hit this job's timeout. The eval harness has no need to feed
+          # production trace tooling.
+          INSUMMERY_DISABLE_CLOUD_TRACE: 'true'
         run: |
           SUITES_ARG=""
           if [ -n "${{ github.event.inputs.suites }}" ]; then
@@ -139,6 +147,7 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           FORCE_CLOUD_LLM: 'true'
+          INSUMMERY_DISABLE_CLOUD_TRACE: 'true'
         run: |
           uv run insummery-eval diagnose \
             --out output/diagnosis.md \
