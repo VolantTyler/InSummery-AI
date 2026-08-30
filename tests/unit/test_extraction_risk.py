@@ -43,11 +43,17 @@ def assess(acts, **kw):
 
 def test_unresolved_child_name_escalates():
     """The measured failure: activity attached to a name no child matches,
-    reported by the model at confidence 100."""
-    result = assess([activity(child_name="Sammy")])
+    reported by the model at confidence 100.
+
+    "Priya" (not "Sammy") is the unresolved example here: resolve_child_name
+    now understands "Sammy" as a nickname of the profile's "Sam" (see
+    app/name_aliases.py), so a name genuinely absent from the profile is
+    needed to exercise this escalation path.
+    """
+    result = assess([activity(child_name="Priya")])
     assert result["escalate"] is True
     assert "unresolved_child_name" in result["codes"]
-    assert "Sammy" in result["reasons"][0]["detail"]
+    assert "Priya" in result["reasons"][0]["detail"]
     assert "Sam" in result["reasons"][0]["detail"]  # names the known children
 
 
@@ -58,6 +64,11 @@ def test_known_child_does_not_escalate():
 def test_fuller_name_form_does_not_escalate():
     """resolve_child_name maps 'Sam Smith' to 'Sam'; that is correct, not a risk."""
     assert assess([activity(child_name="Sam Smith")])["escalate"] is False
+
+
+def test_nickname_form_does_not_escalate():
+    """resolve_child_name maps 'Sammy' to 'Sam'; that is correct, not a risk."""
+    assert assess([activity(child_name="Sammy")])["escalate"] is False
 
 
 # --- structural completeness ------------------------------------------------
@@ -152,8 +163,8 @@ def test_one_bad_activity_among_good_ones_escalates_and_is_located():
 # --- the human-facing message ----------------------------------------------
 
 def test_message_names_the_problem_not_a_percentage():
-    msg = describe_for_human(assess([activity(child_name="Sammy")]))
-    assert "Sammy" in msg
+    msg = describe_for_human(assess([activity(child_name="Priya")]))
+    assert "Priya" in msg
     assert "%" not in msg
     assert "confidence" not in msg.lower()
 
@@ -166,7 +177,7 @@ def test_message_is_neutral_when_nothing_fired():
 
 def test_assessment_ignores_confidence_score_entirely():
     """The whole point: a model claiming 100 cannot suppress these signals."""
-    payload = [dict(activity(child_name="Sammy"), confidence_score=100)]
+    payload = [dict(activity(child_name="Priya"), confidence_score=100)]
     assert assess(payload)["escalate"] is True
 
 

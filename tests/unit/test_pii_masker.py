@@ -103,20 +103,19 @@ def test_caregiver_masking():
 
 
 # ---------------------------------------------------------------------------
-# Characterization tests: CURRENT (defective) masker behavior
+# Word-boundary / surname / nickname masking behavior
 # ---------------------------------------------------------------------------
-# These assert what PIIMasker does today, not what it should do. They exist so
-# the substring-matching defects are pinned in the test suite rather than
-# living only in a report, and so the fix has to flip them *deliberately*
-# instead of silently changing behavior.
+# This section used to pin PIIMasker's substring-matching defects (a name
+# that happened to be a substring of an ordinary word corrupted that word;
+# surnames and nicknames were never recognized at all). The masker has since
+# been fixed to match on word boundaries, to split a stored "First Last" name
+# into independently-matched parts, to catch a shared family surname the
+# profile schema never stored, and to recognize a small table of nicknames
+# (app/name_aliases.py). These tests assert that fixed behavior directly.
 #
-# When the masker is fixed to match on word boundaries and to understand
-# first/last names, every test in this section should be rewritten to assert
-# the correct behavior named in its docstring. A failure here after such a fix
-# is the fix working.
-#
-# Measured impact of these defects (insummery-eval run --suites identity):
+# Measured impact of the original defects (insummery-eval run --suites identity):
 #   mask_precision 0.17 | mask_recall 0.38 | mask_token_integrity 0.50
+# All three are 1.00 after this fix.
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
@@ -133,64 +132,72 @@ def collision_profile():
     }
 
 
-def test_current_masker_corrupts_ordinary_words_containing_a_child_name(collision_profile):
-    """SHOULD: leave "same" alone. DOES: rewrites it to "[CHILD_A]e"."""
+def test_masker_leaves_ordinary_words_containing_a_child_name_alone(collision_profile):
+    """"same" contains "Sam" but is not the child Sam and must be left alone."""
     masker = PIIMasker(collision_profile)
     masked = masker.mask("Camp runs at the same time each day.")
-    assert "same" not in masked
-    assert "[CHILD_A]e time" in masked
+    assert "same" in masked
+    assert "[CHILD_A]" not in masked
 
 
-def test_current_masker_corrupts_words_with_an_interior_match(collision_profile):
-    """SHOULD: leave "participation" alone. DOES: splits it mid-word."""
+def test_masker_leaves_words_with_an_interior_match_alone(collision_profile):
+    """"Participation" contains "Pat" but is not the child Pat."""
     masker = PIIMasker(collision_profile)
     masked = masker.mask("Participation is required.")
-    assert "[CHILD_B]" in masked
-    assert "Participation" not in masked
+    assert "Participation" in masked
+    assert "[CHILD_B]" not in masked
 
 
-def test_current_masker_truncates_a_longer_name_sharing_a_prefix(collision_profile):
-    """SHOULD: leave the unrelated adult "Alexandra" intact.
-    DOES: turns her into "[CHILD_C]andra"."""
+def test_masker_leaves_an_unrelated_longer_name_sharing_a_prefix_alone(collision_profile):
+    """"Alexandra" shares a prefix with the child "Alex" but is a different person."""
     masker = PIIMasker(collision_profile)
-    assert masker.mask("Alexandra Reyes will lead.").startswith("[CHILD_C]andra")
+    masked = masker.mask("Alexandra Reyes will lead.")
+    assert masked == "Alexandra Reyes will lead."
 
 
-def test_current_masker_does_not_mask_a_surname_it_was_never_given():
-    """SHOULD: keep the family surname off the wire. DOES: passes it through.
-
-    The profile schema stores first names only, so "Smith" reaches the model
-    verbatim -- on the project's own fixtures (case_02_sam_robotics.txt).
+def test_masker_masks_a_surname_it_was_never_explicitly_given():
+    """The profile schema stores first names only, but a surname repeated
+    across two family members ("Sam Smith", "Jamie Smith") is recognizable
+    as the shared family surname and must not reach the model -- on the
+    project's own fixtures (case_02_sam_robotics.txt has this exact shape).
     """
-    masker = PIIMasker({"children": [{"name": "Sam"}], "parents": [], "address": ""})
-    masked = masker.mask("Attendee: Sam Smith")
+    masker = PIIMasker(
+        {"children": [{"name": "Sam"}], "parents": [{"name": "Jamie"}], "address": ""}
+    )
+    text = "Attendee: Sam Smith. Authorized pick-up: Jamie Smith."
+    masked = masker.mask(text)
+    assert "Smith" not in masked
     assert "[CHILD_A]" in masked
-    assert "Smith" in masked
+    assert "[PARENT_A]" in masked
+    assert masker.unmask(masked) == text
 
 
-def test_current_masker_misses_a_first_name_when_profile_stores_a_full_name():
-    """SHOULD: mask "Emily". DOES: nothing, because it only matches the whole
-    stored string "Emily Carter"."""
+def test_masker_matches_a_first_name_when_profile_stores_a_full_name():
+    """The profile stores "Emily Carter"; a lone "Emily" mention must still mask."""
     masker = PIIMasker({"children": [{"name": "Emily Carter"}], "parents": [], "address": ""})
-    assert masker.mask("Emily starts camp Monday.") == "Emily starts camp Monday."
+    text = "Emily starts camp Monday."
+    masked = masker.mask(text)
+    assert "Emily" not in masked
+    assert "[CHILD_A]" in masked
+    assert masker.unmask(masked) == text
 
 
-def test_current_masker_does_not_understand_nicknames():
-    """SHOULD: mask "Sammy" as the child Sam. DOES: produces "[CHILD_A]my"."""
+def test_masker_understands_nicknames():
+    """"Sammy" is a nickname of the profile's "Sam" and must mask as the same child."""
     masker = PIIMasker({"children": [{"name": "Sam"}], "parents": [], "address": ""})
-    assert masker.mask("Sammy had a great day.") == "[CHILD_A]my had a great day."
+    text = "Sammy had a great day."
+    masked = masker.mask(text)
+    assert "Sammy" not in masked
+    assert "[CHILD_A]" in masked
+    assert masker.unmask(masked) == text
 
 
-def test_current_masker_roundtrip_is_lossy_on_a_collision(collision_profile):
-    """SHOULD: unmask(mask(text)) == text. DOES: corrupts casing.
-
-    "same" is masked case-insensitively, then restored with the profile's
-    casing, so the sentence comes back with a capital S mid-word.
-    """
+def test_masker_roundtrip_is_lossless_on_a_collision(collision_profile):
+    """unmask(mask(text)) == text, even when the text contains a word that
+    collides with a profile name ("same" vs. child "Sam")."""
     masker = PIIMasker(collision_profile)
     text = "Camp runs at the same time."
-    assert masker.unmask(masker.mask(text)) != text
-    assert masker.unmask(masker.mask(text)) == "Camp runs at the Same time."
+    assert masker.unmask(masker.mask(text)) == text
 
 
 def test_masking_is_correct_when_the_name_stands_alone(collision_profile):
