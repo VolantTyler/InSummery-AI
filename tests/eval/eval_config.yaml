@@ -45,31 +45,20 @@ thresholds:
   # ---------------------------------------------------------------------
   # Identity suite (offline, no model calls -- gates every PR).
   #
-  # These floors are deliberately pinned to the CURRENT measured behavior,
-  # not to the values we want. PIIMasker does naive substring replacement,
-  # so "Sam" masks inside "same" and a surname the profile does not store
-  # is never masked at all. Those are real defects, documented in
-  # output/diagnosis.md -- they are not fixed here.
-  #
-  # Pinning at today's numbers makes this a RATCHET: the identity layer can
-  # never get worse without failing a PR, while a known-broken component
-  # does not block every unrelated change in the repo.
-  #
-  # When the masker fix lands, raise these to the target column and delete
-  # this note. Any value below target is a bug, not a tolerance.
-  #
-  #   metric                     floor (today)   target (after fix)
-  #   mask_recall                    0.3750            1.00
-  #   mask_precision                 0.1667            1.00
-  #   mask_token_integrity           0.5000            1.00
-  #   mask_roundtrip_fidelity        0.7727            1.00
-  #   name_resolution_accuracy       0.7500            1.00
+  # PIIMasker used to do naive substring replacement ("Sam" masked inside
+  # "same") and had no concept of surnames or nicknames, so these floors
+  # were pinned to that broken behavior as a ratchet. The masker fix
+  # (word-boundary matching, first/last-name splitting, a shared-surname
+  # heuristic for profiles that store only first names, and a small
+  # nickname table shared with resolve_child_name -- see app/pii_masker.py
+  # and app/name_aliases.py) closed the gap; these are now pinned at the
+  # achieved 1.00 across all five metrics, so any regression fails a PR.
   # ---------------------------------------------------------------------
-  mask_recall: 0.3750
-  mask_precision: 0.1667
-  mask_token_integrity: 0.5000
-  mask_roundtrip_fidelity: 0.7727
-  name_resolution_accuracy: 0.7500
+  mask_recall: 1.00
+  mask_precision: 1.00
+  mask_token_integrity: 1.00
+  mask_roundtrip_fidelity: 1.00
+  name_resolution_accuracy: 1.00
 
   # ---------------------------------------------------------------------
   # Hard suite (live). First measured run: hard_score 0.9661,

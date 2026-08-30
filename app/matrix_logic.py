@@ -3,12 +3,15 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
+from app.name_aliases import names_equivalent
+
 
 def parse_date(date_str: str) -> datetime.date:
     return datetime.strptime(date_str, "%Y-%m-%d").date()
 
 
 _NAME_SPLIT = re.compile(r"\s+")
+_POSSESSIVE_SUFFIX = re.compile(r"['’]s$", re.IGNORECASE)
 
 
 def _normalize_person_name(value: Optional[str]) -> str:
@@ -19,6 +22,11 @@ def _normalize_person_name(value: Optional[str]) -> str:
 
 def _name_tokens(value: str) -> List[str]:
     return [t for t in _normalize_person_name(value).split(" ") if t]
+
+
+def _strip_possessive(value: str) -> str:
+    """Strip a trailing possessive ("Riley's" -> "Riley") before matching."""
+    return _POSSESSIVE_SUFFIX.sub("", value)
 
 
 def _safe_replace_year(value: datetime.date, year: int) -> datetime.date:
@@ -113,7 +121,7 @@ def resolve_child_name(
     ``method`` (``exact`` / ``first_name`` / ``token_containment`` / ``none``),
     and ``extracted`` (original string).
     """
-    raw = (extracted or "").strip()
+    raw = _strip_possessive((extracted or "").strip())
     children = [
         c.get("name")
         for c in (profile_children or [])
@@ -133,8 +141,12 @@ def resolve_child_name(
     extracted_norm = _normalize_person_name(raw)
     extracted_tokens = _name_tokens(raw)
 
-    # 1) Exact (case-insensitive) → profile's stored casing.
-    exact = [name for name in children if _normalize_person_name(name) == extracted_norm]
+    # 1) Exact (case-insensitive, or a known nickname) → profile's stored casing.
+    exact = [
+        name
+        for name in children
+        if _normalize_person_name(name) == extracted_norm or names_equivalent(name, raw)
+    ]
     if len(exact) == 1:
         result.update({"resolved": exact[0], "matched": True, "method": "exact"})
         return result
@@ -142,13 +154,14 @@ def resolve_child_name(
         # Ambiguous identical profile names — keep extracted.
         return result
 
-    # 2) Unique first-name match: profile "Sam" ← extracted "Sam Smith".
+    # 2) Unique first-name match (nicknames included): profile "Sam" ←
+    #    extracted "Sam Smith" or "Sammy Smith".
     if extracted_tokens:
         first = extracted_tokens[0]
         first_hits = [
             name
             for name in children
-            if (_name_tokens(name)[:1] or [None])[0] == first
+            if names_equivalent((_name_tokens(name)[:1] or [None])[0] or "", first)
         ]
         if len(first_hits) == 1:
             result.update(
