@@ -36,6 +36,10 @@ jobs:
     name: Live Eval + Baseline Regression Gate
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+      actions: write
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -55,59 +59,53 @@ jobs:
           uv venv
           uv pip install -e .[dev]
 
-      # Vertex AI is the project's chosen provider (app/model_client.py
-      # defaults to vertex_ai/). Authenticate to Google Cloud when a service
-      # account credential is configured; the API-key path below is the
-      # fallback so this workflow keeps running while Vertex CI auth is being
-      # set up.
-      #
-      # The `secrets` context cannot be referenced directly inside an `if:`
-      # condition -- GitHub Actions does not expose it there (only in `env:`
-      # / `with:`), and a workflow that tries fails validation entirely, not
-      # just that step. So a preceding step exports presence as a step
-      # output, which `if:` on steps.*.outputs *is* allowed to read.
-      - name: Check for a Vertex AI credential
-        id: check_gcp
-        env:
-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
-        run: |
-          if [ -n "$GCP_SA_KEY" ]; then
-            echo "has_key=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_key=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Authenticate to Google Cloud (Vertex AI)
+      # Vertex AI is the project's provider (app/model_client.py defaults to
+      # vertex_ai/). Prefer Workload Identity Federation. The JSON key remains
+      # a fallback until a run logs "Google auth path: workload identity
+      # federation". GEMINI_API_KEY is the last resort and cannot be federated.
+      # Auth runs after dependency install so the short-lived GitHub OIDC token
+      # is exchanged immediately before the eval, not before a long install.
+      - name: Authenticate to Google Cloud
         id: gcp_auth
-        if: steps.check_gcp.outputs.has_key == 'true'
-        uses: google-github-actions/auth@v2
+        uses: ./.github/actions/google-cloud-auth
         with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_EVAL_SERVICE_ACCOUNT || vars.GCP_SERVICE_ACCOUNT }}
           credentials_json: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ vars.GCP_PROJECT || secrets.GCP_PROJECT || 'in-summery' }}
+          required: 'false'
 
       - name: Select model provider
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
-          VERTEX_AUTHED: ${{ steps.gcp_auth.outcome == 'success' }}
+          GCP_PROJECT: ${{ steps.gcp_auth.outputs.project_id || vars.GCP_PROJECT || secrets.GCP_PROJECT }}
+          GCP_LOCATION: ${{ vars.GCP_LOCATION || secrets.GCP_LOCATION || 'us-central1' }}
+          AUTH_METHOD: ${{ steps.gcp_auth.outputs.method }}
         run: |
-          if [ "$VERTEX_AUTHED" = "true" ] && [ -n "$GCP_PROJECT" ]; then
-            echo "Using Vertex AI (project $GCP_PROJECT)"
+          if [ "$AUTH_METHOD" = "wif" ] || [ "$AUTH_METHOD" = "key" ]; then
+            if [ -z "$GCP_PROJECT" ]; then
+              echo "::error::Google auth succeeded but no GCP project id is available."
+              exit 1
+            fi
+            echo "Using Vertex AI (project $GCP_PROJECT, auth $AUTH_METHOD)"
             echo "GEMINI_MODEL=vertex_ai/gemini-2.5-flash" >> "$GITHUB_ENV"
             echo "VERTEXAI_PROJECT=$GCP_PROJECT" >> "$GITHUB_ENV"
             echo "GOOGLE_CLOUD_PROJECT=$GCP_PROJECT" >> "$GITHUB_ENV"
-            echo "VERTEXAI_LOCATION=${{ secrets.GCP_LOCATION || 'us-central1' }}" >> "$GITHUB_ENV"
+            echo "VERTEXAI_LOCATION=$GCP_LOCATION" >> "$GITHUB_ENV"
           elif [ -n "$GEMINI_API_KEY" ]; then
             echo "Vertex AI is not configured; falling back to the Gemini API key."
             echo "::warning::Running against gemini/ (API key), not Vertex AI."
-            echo "To use Vertex, add the GCP_SA_KEY and GCP_PROJECT secrets."
+            echo "To use Vertex, set GCP_WIF_PROVIDER and GCP_EVAL_SERVICE_ACCOUNT (or GCP_SERVICE_ACCOUNT)."
+            echo "The GCP_SA_KEY secret is only a fallback. See docs/wif-setup.md."
             echo "GEMINI_MODEL=gemini/gemini-2.5-flash" >> "$GITHUB_ENV"
           else
             # Fail loudly rather than silently green: a nightly eval that
             # quietly skips because a secret expired is worse than no nightly
             # eval, because it looks like passing.
             echo "::error::No model credential is configured for this repository."
-            echo "Add GCP_SA_KEY + GCP_PROJECT (Vertex AI), or GEMINI_API_KEY,"
-            echo "under Settings -> Secrets and variables -> Actions."
+            echo "Set GCP_WIF_PROVIDER and an eval service account (Vertex AI),"
+            echo "or keep GCP_SA_KEY until WIF succeeds, or set GEMINI_API_KEY."
+            echo "See docs/wif-setup.md."
             exit 1
           fi
 
@@ -115,8 +113,10 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           # GEMINI_MODEL / VERTEXAI_* come from the "Select model provider"
-          # step via GITHUB_ENV. Baselines are per-model, so switching provider
-          # switches which baseline file the regression gate compares against.
+          # step via GITHUB_ENV. GOOGLE_APPLICATION_CREDENTIALS is exported by
+          # google-github-actions/auth when Vertex auth succeeded. Baselines
+          # are per-model, so switching provider switches which baseline file
+          # the regression gate compares against.
           FORCE_CLOUD_LLM: 'true'
           # The eval-only service account is scoped to roles/aiplatform.user
           # only (least privilege), so it lacks cloudtrace.traces.patch.

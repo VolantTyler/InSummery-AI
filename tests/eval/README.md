@@ -75,8 +75,14 @@ The harness uses the same model resolution as the production workflow
 matching model, otherwise **Gemini** via LiteLLM. To execute the eval loop end
 to end you therefore need one of:
 
-- a `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) environment variable — for Cloud
-  Agents, add it as a secret in the Cursor Dashboard (Cloud Agents → Secrets); or
+- Vertex AI application default credentials and `GOOGLE_CLOUD_PROJECT` (or
+  `VERTEXAI_PROJECT`). This is what `GEMINI_MODEL` defaults to
+  (`vertex_ai/gemini-2.5-flash`). GitHub Actions supplies those credentials
+  with Workload Identity Federation; see [docs/wif-setup.md](../../docs/wif-setup.md).
+- a `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) **and**
+  `GEMINI_MODEL=gemini/gemini-2.5-flash` — for Cloud Agents, add the key as a
+  secret in the Cursor Dashboard (Cloud Agents → Secrets). The key alone does
+  not select the Developer API; or
 - a running Ollama instance (set `OLLAMA_MODEL` / `OLLAMA_API_BASE` to override
   the defaults).
 
@@ -109,11 +115,16 @@ covered offline by unit tests (`tests/unit/test_eval_scoring.py`,
 | | Suites | Credential | Gate |
 |---|---|---|---|
 | `ci.yml`, every PR | `identity` | none needed | thresholds |
-| `eval-nightly.yml`, nightly + manual | all | `GCP_SA_KEY` + `GCP_PROJECT` (Vertex), or `GEMINI_API_KEY` | thresholds + baseline regression |
+| `eval-nightly.yml`, nightly + manual | all | `GCP_WIF_PROVIDER` + eval service account (Vertex), else `GCP_SA_KEY`, else `GEMINI_API_KEY` | thresholds + baseline regression |
 
-The nightly picks Vertex AI when `GCP_SA_KEY` and `GCP_PROJECT` are configured
-and falls back to the API key otherwise, warning in the log when it does. With
-neither, it fails the job rather than passing while measuring nothing.
+The nightly picks Vertex AI when Google auth succeeds (Workload Identity
+Federation, or the `GCP_SA_KEY` JSON fallback) and a project id is available.
+It falls back to the Gemini API key otherwise, warning in the log when it
+does. With neither, it fails the job rather than passing while measuring
+nothing. `GEMINI_API_KEY` cannot be federated. Once a nightly log shows
+`Google auth path: workload identity federation` and `Using Vertex AI`, the
+API key is unused on that path and can be removed. See
+[docs/wif-setup.md](../../docs/wif-setup.md).
 
 Before this split, `insummery-eval` ran in no workflow at all: the thresholds
 and the committed baseline were never enforced automatically.

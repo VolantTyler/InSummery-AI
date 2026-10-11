@@ -70,6 +70,9 @@ jobs:
     name: Deploy to Firebase
     needs: test-and-lint
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -86,8 +89,11 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'frontend/package-lock.json'
 
+      # 15.22.3 or newer: firebase-tools reads the external_account credentials
+      # file written by google-github-actions/auth (ADC / WIF). Earlier 15.22
+      # builds failed that path with "have you run firebase login?".
       - name: Install Firebase CLI
-        run: npm install -g firebase-tools
+        run: npm install -g firebase-tools@15.33.0
 
       - name: Set up Functions Virtual Environment
         run: |
@@ -101,9 +107,27 @@ jobs:
           npm ci
           npm run build
 
+      # Authenticate immediately before deploy. The auth action writes the
+      # credentials file and exports GOOGLE_APPLICATION_CREDENTIALS; this
+      # workflow does not echo a JSON key to disk. The JSON key is passed
+      # only on main, so a workflow_dispatch from another ref cannot use it.
+      # WIF for the deploy service account should additionally be bound to
+      # refs/heads/main (see docs/wif-setup.md).
+      - name: Authenticate to Google Cloud
+        id: gcp_auth
+        uses: ./.github/actions/google-cloud-auth
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER_DEPLOY || vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT || vars.GCP_SERVICE_ACCOUNT }}
+          credentials_json: ${{ github.ref == 'refs/heads/main' && secrets.FIREBASE_SERVICE_ACCOUNT_KEY || '' }}
+          project_id: ${{ vars.GCP_PROJECT || 'in-summery' }}
+          required: 'true'
+          install_gcloud: 'true'
+
       - name: Deploy to Firebase
         env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/service-account.json
+          FIREBASE_PROJECT: ${{ vars.GCP_PROJECT || 'in-summery' }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.gcp_auth.outputs.credentials_file_path }}
+          CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: ${{ steps.gcp_auth.outputs.credentials_file_path }}
         run: |
-          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}' > service-account.json
-          firebase deploy --only hosting,functions,firestore --project in-summery
+          firebase deploy --only hosting,functions,firestore --project "$FIREBASE_PROJECT" --non-interactive

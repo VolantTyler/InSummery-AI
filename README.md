@@ -224,6 +224,13 @@ Google Cloud Console API key like a Firebase browser key — those are for
 client-side Firebase SDK calls, not LLM inference) instead of steps 1-3
 above.
 
+GitHub Actions uses the same Vertex ADC model. Nightly eval, production
+deploy, and Hosting previews authenticate with Workload Identity Federation
+and keep the existing service-account JSON keys only as a fallback. Setup is
+in [docs/wif-setup.md](docs/wif-setup.md). `GEMINI_API_KEY` cannot be
+federated; the nightly workflow already switches to `vertex_ai/` when Google
+auth succeeds, and the API key is only the fallback when it does not.
+
 ---
 
 ## Google Calendar OAuth Secrets (Production)
@@ -250,20 +257,13 @@ that writes a new secret version there.
 2. Grant the **CI deploy service account** access to the secrets. During
    `firebase deploy`, the CLI resolves the `latest` secret version and grants
    the function's runtime service account access to it — both require Secret
-   Manager permissions on the deploying identity. The deploy service account
-   is the `client_email` inside the JSON stored in the
-   `FIREBASE_SERVICE_ACCOUNT_KEY` GitHub Actions secret. Grant it
-   `roles/secretmanager.admin` scoped to just these two secrets:
-   ```bash
-   DEPLOY_SA="<client_email from FIREBASE_SERVICE_ACCOUNT_KEY>"
-   for s in GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET; do
-     gcloud secrets add-iam-policy-binding "$s" \
-       --project=in-summery \
-       --member="serviceAccount:${DEPLOY_SA}" \
-       --role="roles/secretmanager.admin"
-   done
-   ```
-   Without this, deploys fail with
+   Manager permissions on the deploying identity. That identity is
+   `github-deploy@in-summery.iam.gserviceaccount.com` after Workload Identity
+   Federation is in place (`GCP_DEPLOY_SERVICE_ACCOUNT`). The function
+   declares `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `WANDB_API_KEY`.
+   Grant `roles/secretmanager.admin` on each of those three secrets. The
+   exact commands, and the rest of the CI identity setup, are in
+   [docs/wif-setup.md](docs/wif-setup.md). Without this, deploys fail with
    `Permission 'secretmanager.versions.get' denied on resource (or it may not exist)`.
 
 3. Deploy. The CLI automatically grants the function's runtime service
@@ -429,10 +429,14 @@ insummery-eval baseline               # regenerate the baseline after intentiona
 insummery-eval weave-monitors         # activate Weave soft-failure monitors (requires Weave)
 ```
 
-Executing the evals requires a `GEMINI_API_KEY` (or a running Ollama
-instance). The committed reference baseline is generated against Gemini. See
+Executing the evals requires Vertex AI ADC (the default
+`vertex_ai/gemini-2.5-flash` model; locally via `gcloud auth
+application-default login`, in GitHub Actions via Workload Identity
+Federation) or a `GEMINI_API_KEY` plus `GEMINI_MODEL=gemini/gemini-2.5-flash`.
+A running Ollama instance also works for local iteration. The committed
+reference baseline is generated against Gemini. See
 [tests/eval/README.md](tests/eval/README.md) for suites, metrics, thresholds,
-and the baseline policy.
+and the baseline policy, and [docs/wif-setup.md](docs/wif-setup.md) for CI.
 
 The end-to-end workflow suite also runs automatically as part of
 `python -m pytest` (`tests/eval/test_extraction_eval.py`), and is skipped
