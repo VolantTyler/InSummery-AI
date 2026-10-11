@@ -57,14 +57,15 @@ def test_deploy_job_does_not_write_a_key_file():
 def test_preview_workflow_skips_forks_and_does_not_use_hosting_action():
     path = WORKFLOWS / "firebase-hosting-pull-request.yml"
     workflow = _load(path)
+    # PyYAML 1.1 parses the key "on" as boolean true.
+    assert workflow[True] == "pull_request"
     job = workflow["jobs"]["build_and_preview"]
     assert "head.repo.full_name" in job["if"]
     assert job["permissions"]["id-token"] == "write"
     assert job["permissions"]["contents"] == "read"
     assert job["permissions"]["pull-requests"] == "write"
     text = path.read_text()
-    assert "FirebaseExtended/action-hosting-deploy" not in text
-    assert "pull_request_target" not in text
+    assert "uses: FirebaseExtended/action-hosting-deploy" not in text
     assert "hosting:channel:deploy" in text
     assert "secrets.FIREBASE_SERVICE_ACCOUNT_IN_SUMMERY" in text
     assert "vars.GCP_WIF_PROVIDER" in text
