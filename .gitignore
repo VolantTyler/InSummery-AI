@@ -150,3 +150,7 @@ output/diagnosis.json
 output/eval_report.json
 output/hard_judge.json
 output/judge_result.json
+
+# google-github-actions/auth writes this credentials file into the workspace.
+gha-creds-*.json
+service-account.json

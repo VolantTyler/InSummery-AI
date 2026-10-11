@@ -1,0 +1,145 @@
+name: Authenticate to Google Cloud
+description: >-
+  Workload Identity Federation via google-github-actions/auth, with a
+  service-account JSON key fallback. Logs which path was used and never
+  prints the credential. The calling job must set permissions
+  id-token: write and contents: read, and must check out the repo first.
+
+inputs:
+  workload_identity_provider:
+    description: Full Workload Identity Provider resource name.
+    required: false
+    default: ""
+  service_account:
+    description: Service account email to impersonate.
+    required: false
+    default: ""
+  credentials_json:
+    description: Fallback service-account JSON key. Used only when WIF is unset or fails.
+    required: false
+    default: ""
+  project_id:
+    description: GCP project id passed to the auth action.
+    required: false
+    default: in-summery
+  required:
+    description: When true, fail if neither WIF nor the JSON key authenticates.
+    required: false
+    default: "false"
+  install_gcloud:
+    description: When true, install gcloud after a successful auth (WIF needs gcloud >= 363).
+    required: false
+    default: "false"
+
+outputs:
+  method:
+    description: wif, key, or none.
+    value: ${{ steps.finish.outputs.method }}
+  credentials_file_path:
+    description: Credentials file written by the auth action. Empty when method is none.
+    value: ${{ steps.finish.outputs.credentials_file_path }}
+  project_id:
+    description: Project id exported by the successful auth step.
+    value: ${{ steps.finish.outputs.project_id }}
+
+runs:
+  using: composite
+  steps:
+    - name: Choose Google auth path
+      id: choose
+      shell: bash
+      env:
+        WIF_PROVIDER: ${{ inputs.workload_identity_provider }}
+        WIF_SERVICE_ACCOUNT: ${{ inputs.service_account }}
+        CREDENTIALS_JSON: ${{ inputs.credentials_json }}
+      run: |
+        set -euo pipefail
+        if [ -n "$WIF_PROVIDER" ] && [ -n "$WIF_SERVICE_ACCOUNT" ]; then
+          echo "try_wif=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "try_wif=false" >> "$GITHUB_OUTPUT"
+          if [ -n "$WIF_PROVIDER" ] || [ -n "$WIF_SERVICE_ACCOUNT" ]; then
+            echo "::warning::Workload Identity Federation needs both the provider and the service account. Skipping WIF."
+          fi
+        fi
+        if [ -n "$CREDENTIALS_JSON" ]; then
+          echo "has_key=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "has_key=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Authenticate with Workload Identity Federation
+      id: auth_wif
+      if: steps.choose.outputs.try_wif == 'true'
+      continue-on-error: true
+      uses: google-github-actions/auth@v3
+      with:
+        workload_identity_provider: ${{ inputs.workload_identity_provider }}
+        service_account: ${{ inputs.service_account }}
+        project_id: ${{ inputs.project_id }}
+        create_credentials_file: true
+        export_environment_variables: true
+
+    - name: Note WIF failure
+      if: steps.auth_wif.outcome == 'failure'
+      shell: bash
+      run: |
+        echo "::warning::Workload Identity Federation authentication failed. Falling back to the service account JSON key if one is configured."
+
+    - name: Authenticate with service account JSON key
+      id: auth_key
+      if: steps.choose.outputs.has_key == 'true' && steps.auth_wif.outcome != 'success'
+      uses: google-github-actions/auth@v3
+      with:
+        credentials_json: ${{ inputs.credentials_json }}
+        project_id: ${{ inputs.project_id }}
+        create_credentials_file: true
+        export_environment_variables: true
+
+    - name: Record Google auth path
+      id: finish
+      if: always() && steps.auth_key.outcome != 'failure'
+      shell: bash
+      env:
+        WIF_OUTCOME: ${{ steps.auth_wif.outcome }}
+        KEY_OUTCOME: ${{ steps.auth_key.outcome }}
+        WIF_CREDS: ${{ steps.auth_wif.outputs.credentials_file_path }}
+        KEY_CREDS: ${{ steps.auth_key.outputs.credentials_file_path }}
+        WIF_PROJECT: ${{ steps.auth_wif.outputs.project_id }}
+        KEY_PROJECT: ${{ steps.auth_key.outputs.project_id }}
+        INPUT_PROJECT: ${{ inputs.project_id }}
+      run: |
+        set -euo pipefail
+        if [ "$WIF_OUTCOME" = "success" ]; then
+          echo "method=wif" >> "$GITHUB_OUTPUT"
+          echo "credentials_file_path=$WIF_CREDS" >> "$GITHUB_OUTPUT"
+          echo "project_id=${WIF_PROJECT:-$INPUT_PROJECT}" >> "$GITHUB_OUTPUT"
+          echo "Google auth path: workload identity federation"
+        elif [ "$KEY_OUTCOME" = "success" ]; then
+          echo "method=key" >> "$GITHUB_OUTPUT"
+          echo "credentials_file_path=$KEY_CREDS" >> "$GITHUB_OUTPUT"
+          echo "project_id=${KEY_PROJECT:-$INPUT_PROJECT}" >> "$GITHUB_OUTPUT"
+          if [ "$WIF_OUTCOME" = "failure" ]; then
+            echo "Google auth path: service account JSON key (workload identity federation failed)"
+          else
+            echo "Google auth path: service account JSON key (WIF variables are not set)"
+          fi
+        else
+          echo "method=none" >> "$GITHUB_OUTPUT"
+          echo "credentials_file_path=" >> "$GITHUB_OUTPUT"
+          echo "project_id=" >> "$GITHUB_OUTPUT"
+          echo "Google auth path: none"
+        fi
+
+    - name: Fail if Google auth is required
+      if: steps.finish.outputs.method == 'none' && inputs.required == 'true'
+      shell: bash
+      run: |
+        echo "::error::Google Cloud auth did not succeed. Set the WIF repository variables or the JSON key secret. See docs/wif-setup.md."
+        exit 1
+
+    - name: Set up gcloud
+      if: inputs.install_gcloud == 'true' && (steps.finish.outputs.method == 'wif' || steps.finish.outputs.method == 'key')
+      uses: google-github-actions/setup-gcloud@v3
+      with:
+        version: ">= 363.0.0"
